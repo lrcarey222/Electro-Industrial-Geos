@@ -1,0 +1,10 @@
+citHeader("Electrotech Index")
+
+citEntry(
+  entry = "Manual",
+  title = "Electrotech Index",
+  author = person("OpenAI Codex"),
+  year = "2025",
+  note = "R package and targets pipeline",
+  textVersion = "OpenAI Codex (2025). Electrotech Index."
+)

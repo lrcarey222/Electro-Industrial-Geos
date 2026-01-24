@@ -1,0 +1,5 @@
+data_dir: data
+cache_dir: data/raw_cache
+output_dir: outputs
+snapshot_date: "2025-01-01"
+use_sample_data: true
