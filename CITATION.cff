@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+title: "Electrotech Index"
+message: "If you use this software, please cite it."
+type: software
+authors:
+  - name: "OpenAI Codex"
+version: 0.1.0
+date-released: "2025-01-01"
+license: MIT
+repository-code: "https://example.com/electrotechindex"
