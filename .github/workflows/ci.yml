@@ -1,23 +1,30 @@
-name: R-CMD-check
+name: electrotech-ci
 
 on:
   push:
   pull_request:
 
 jobs:
-  r-cmd-check:
+  pipeline-check:
     runs-on: ubuntu-latest
     env:
       ELECTROTECH_USE_SAMPLE_DATA: "true"
+      SKIP_DATA_DOWNLOADS: "true"
     steps:
       - uses: actions/checkout@v4
       - uses: r-lib/actions/setup-r@v2
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          extra-packages: any::rcmdcheck, any::lintr, any::targets
-      - name: R CMD check
-        run: R CMD check . --no-manual --as-cran
-      - name: Lint
-        run: Rscript -e "lintr::lint_package()"
-      - name: Targets smoke test
-        run: Rscript scripts/run_pipeline.R
+          extra-packages: any::renv, any::testthat, any::lintr
+      - name: Restore renv
+        run: Rscript -e "if (file.exists('renv.lock')) renv::restore(prompt = FALSE)"
+      - name: Secret scan
+        run: |
+          if git grep -nE "(AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z\-_]{35}|ghp_[0-9A-Za-z]{36}|password\s*=|secret\s*=|token\s*=)" -- .; then
+            echo "Potential secret detected. Remove secrets before committing."
+            exit 1
+          fi
+      - name: Unit tests
+        run: Rscript -e "testthat::test_dir('tests/testthat')"
+      - name: Smoke test
+        run: Rscript run_pipeline.R

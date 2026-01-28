@@ -1,0 +1,9 @@
+data_dir: data
+raw_dir: data/raw
+processed_dir: data/processed
+examples_dir: data/examples
+cache_dir: data/raw_cache
+output_dir: outputs
+snapshot_date: "YYYY-MM-DD"
+use_sample_data: true
+write_audit: true
