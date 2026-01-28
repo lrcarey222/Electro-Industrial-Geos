@@ -1,0 +1,13 @@
+electrotech:
+  deployment_index: 0.4
+  infra_index: 0.15
+  econ_index: 0.15
+  intent_index: 0.2
+  cluster_index: 0.2
+  ease_index: 0.2
+infrastructure:
+  renewable_potential: 0.2
+  ev_stations_cap: 0.2
+  interconnection_queue: 0.2
+  electricity_price: 0.2
+  cnbc_rank: 0.2

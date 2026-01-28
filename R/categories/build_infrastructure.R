@@ -6,13 +6,15 @@
 build_infrastructure_index <- function(inputs) {
   positive <- c("renewable_potential", "ev_stations_cap", "electricity_price")
   negative <- c("interconnection_queue", "cnbc_rank")
-  weights <- c(
+  weights_cfg <- getOption("electrotech.weights")
+  weights <- weights_cfg$infrastructure %||% list(
     renewable_potential = 0.2,
     ev_stations_cap = 0.2,
     interconnection_queue = 0.2,
     electricity_price = 0.2,
     cnbc_rank = 0.2
   )
+  weights <- unlist(weights, use.names = TRUE)
 
   scaled <- scale_dataframe_by_polarity(inputs, positive, negative)
 

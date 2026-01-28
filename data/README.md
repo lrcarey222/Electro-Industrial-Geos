@@ -46,8 +46,12 @@ The full pipeline expects the following columns:
 
 ## Sample data
 
-A minimal synthetic dataset is included at `inst/extdata/sample_inputs.csv`. It enables CI smoke tests and unit tests without proprietary data.
+A minimal synthetic dataset is included at `data/examples/sample_inputs.csv` (and mirrored in `inst/extdata/` for package usage). It enables CI smoke tests and unit tests without proprietary data.
 
 ## Caching
 
 Downloaded public data should be cached under `data/raw_cache/` using `download_with_cache()`.
+
+## Raw source staging
+
+The ingestion stage (`scripts/05_ingest_sources.R`) treats legacy hard-coded file paths in `Legacy Script/Electrotech_State.R` as if they live under `data/raw/`. Place those files (or folders) in `data/raw/` matching the same relative paths (for example, `data/raw/Good Jobs First/gjf_complete.csv`). URL-based files referenced in the legacy script are downloaded into `data/raw/remote/` during ingestion unless `SKIP_DATA_DOWNLOADS=true`.

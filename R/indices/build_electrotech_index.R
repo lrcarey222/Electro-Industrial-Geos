@@ -16,7 +16,8 @@ build_electrotech_index <- function(
   regulatory,
   cluster
 ) {
-  weights <- c(
+  weights_cfg <- getOption("electrotech.weights")
+  weights <- weights_cfg$electrotech %||% list(
     deployment_index = 0.4,
     infra_index = 0.15,
     econ_index = 0.15,
@@ -24,6 +25,7 @@ build_electrotech_index <- function(
     cluster_index = 0.2,
     ease_index = 0.2
   )
+  weights <- unlist(weights, use.names = TRUE)
 
   combined <- deployment %>%
     dplyr::select(state, abbr, deployment_index) %>%
