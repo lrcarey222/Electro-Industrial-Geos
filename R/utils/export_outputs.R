@@ -2,9 +2,11 @@
 #'
 #' @param outputs Named list of data frames.
 #' @param paths Paths list from resolve_paths.
+#' @param raw_inputs Raw input data frame.
+#' @param index_definition Optional index definition.
 #' @return Invisible TRUE.
 #' @export
-export_outputs <- function(outputs, paths) {
+export_outputs <- function(outputs, paths, raw_inputs = NULL, index_definition = NULL) {
   readr::write_csv(outputs$electrotech, fs::path(paths$output_dir, "electrotech.csv"))
   readr::write_csv(outputs$deployment, fs::path(paths$output_dir, "deployment.csv"))
   readr::write_csv(outputs$regulatory, fs::path(paths$output_dir, "reg_friction.csv"))
@@ -38,6 +40,17 @@ export_outputs <- function(outputs, paths) {
     use_sample_data = paths$use_sample_data
   )
   readr::write_csv(metadata, fs::path(paths$metadata_dir, "run_metadata.csv"))
+
+  if (!is.null(raw_inputs) && isTRUE(paths$write_audit)) {
+    audit_dir <- fs::path(paths$output_dir, "audit")
+    fs::dir_create(audit_dir, recurse = TRUE)
+    audit_table <- build_audit_table(
+      raw_inputs,
+      indices = outputs,
+      definition = index_definition
+    )
+    readr::write_csv(audit_table, fs::path(audit_dir, "electrotech_audit_long.csv"))
+  }
 
   invisible(TRUE)
 }

@@ -46,7 +46,7 @@ The full pipeline expects the following columns:
 
 ## Sample data
 
-A minimal synthetic dataset is included at `inst/extdata/sample_inputs.csv`. It enables CI smoke tests and unit tests without proprietary data.
+A minimal synthetic dataset is included at `data/examples/sample_inputs.csv` (and mirrored in `inst/extdata/` for package usage). It enables CI smoke tests and unit tests without proprietary data.
 
 ## Caching
 

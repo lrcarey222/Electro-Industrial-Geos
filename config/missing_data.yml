@@ -1,0 +1,4 @@
+handling:
+  scale_minmax: "Non-finite values coerced to NA before scaling; constant vectors return 0."
+  weighted_index: "Weights are re-normalized across non-missing indicators."
+  policy_intent: "Missing incentives_gdp and legislation_index default to 0 prior to scaling."
