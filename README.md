@@ -57,6 +57,8 @@ export ELECTROTECH_USE_SAMPLE_DATA=false
 export ELECTROTECH_DATA_DIR=/path/to/data
 ```
 
+Legacy raw files referenced in `Legacy Script/Electrotech_State.R` should be staged under `data/raw/` using the same relative paths (for example, `data/raw/Good Jobs First/gjf_complete.csv`). URL-based sources are downloaded by `scripts/05_ingest_sources.R` into `data/raw/remote/` unless `SKIP_DATA_DOWNLOADS=true`.
+
 ## Configuration
 
 Config files live in `config/`:
