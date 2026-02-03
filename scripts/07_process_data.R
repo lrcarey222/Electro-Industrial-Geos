@@ -17,47 +17,34 @@ read_optional_csv <- function(path) {
 }
 
 load_state_gdp <- function(raw_dir) {
-  table_path <- fs::path(raw_dir, "table_8.xlsx")
-  if (fs::file_exists(table_path)) {
-    gdp <- openxlsx::read.xlsx(table_path)
-    gdp <- janitor::clean_names(gdp)
-    name_candidates <- c("geo_name", "geoname", "state", "state_name", "name")
-    name_col <- name_candidates[name_candidates %in% names(gdp)][1]
-    year_col <- names(gdp)[stringr::str_detect(names(gdp), "2022")][1]
-    if (is.na(name_col) || is.na(year_col)) {
-      return(tibble::tibble())
-    }
-    gdp %>%
-      dplyr::select(
-        GeoName = !!rlang::sym(name_col),
-        gdp_2022 = !!rlang::sym(year_col)
-      ) %>%
-      dplyr::mutate(gdp_2022 = readr::parse_number(gdp_2022))
-  } else {
-    zip_path <- fs::path(raw_dir, "remote", "SQGDP.zip")
-    if (!fs::file_exists(zip_path)) {
-      return(tibble::tibble())
-    }
-    temp_dir <- tempfile()
-    fs::dir_create(temp_dir)
-    utils::unzip(zip_path, exdir = temp_dir)
-    gdp_path <- list.files(temp_dir, full.names = TRUE)
-    gdp_path <- gdp_path[stringr::str_detect(basename(gdp_path), "SQGDP9__ALL_AREAS")][1]
-    if (is.na(gdp_path)) {
-      return(tibble::tibble())
-    }
-    gdp <- readr::read_csv(gdp_path, show_col_types = FALSE) %>%
-      janitor::clean_names()
-    gdp <- gdp %>%
-      dplyr::filter(.data$description == "All industry total" | .data$line_code == 1)
-    year_cols <- names(gdp)[stringr::str_detect(names(gdp), "^x2022")]
-    if (length(year_cols) == 0) {
-      return(tibble::tibble())
-    }
-    gdp %>%
-      dplyr::mutate(gdp_2022 = rowMeans(dplyr::select(., dplyr::all_of(year_cols)), na.rm = TRUE)) %>%
-      dplyr::select(GeoName = .data$geo_name, gdp_2022)
+  zip_path <- fs::path(raw_dir, "remote", "SAGDP.zip")
+  if (!fs::file_exists(zip_path)) {
+    return(tibble::tibble())
   }
+  temp_dir <- tempfile()
+  fs::dir_create(temp_dir)
+  utils::unzip(zip_path, exdir = temp_dir)
+  gdp_path <- list.files(temp_dir, full.names = TRUE)
+  gdp_path <- gdp_path[stringr::str_detect(basename(gdp_path), "SAGDP9__ALL_AREAS_1997_2024.csv")][1]
+  if (is.na(gdp_path)) {
+    return(tibble::tibble())
+  }
+  gdp <- readr::read_csv(
+    gdp_path,
+    show_col_types = FALSE,
+    col_types = readr::cols(.default = readr::col_character())
+  ) %>%
+    janitor::clean_names()
+  gdp %>%
+    dplyr::filter(.data$description == "All industry total ") %>%
+    dplyr::select(
+      GeoFIPS = "geo_fips",
+      GeoName = "geo_name",
+      Unit = "unit",
+      Description = "description",
+      gdp_2024 = "x2024"
+    ) %>%
+    dplyr::mutate(gdp_2024 = readr::parse_number(gdp_2024))
 }
 
 base_inputs <- if (isTRUE(paths$use_sample_data)) {
@@ -105,7 +92,7 @@ if (!is.null(gjf) && nrow(state_gdp) > 0) {
 
   incentives <- electrotech_state_tot %>%
     dplyr::left_join(state_gdp, by = c("location" = "GeoName")) %>%
-    dplyr::mutate(incentives_gdp = ifelse(is.na(gdp_2022), NA_real_, subs_m / gdp_2022 * 100)) %>%
+    dplyr::mutate(incentives_gdp = ifelse(is.na(gdp_2024), NA_real_, subs_m / gdp_2024 * 100)) %>%
     dplyr::transmute(state = location, incentives_gdp)
 }
 
