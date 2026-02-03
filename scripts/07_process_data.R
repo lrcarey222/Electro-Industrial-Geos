@@ -29,16 +29,20 @@ load_state_gdp <- function(raw_dir) {
   if (is.na(gdp_path)) {
     return(tibble::tibble())
   }
-  gdp <- readr::read_csv(gdp_path, show_col_types = FALSE) %>%
+  gdp <- readr::read_csv(
+    gdp_path,
+    show_col_types = FALSE,
+    col_types = readr::cols(.default = readr::col_character())
+  ) %>%
     janitor::clean_names()
   gdp %>%
     dplyr::filter(.data$description == "All industry total ") %>%
     dplyr::select(
-      GeoFIPS = .data$geo_fips,
-      GeoName = .data$geo_name,
-      Unit = .data$unit,
-      Description = .data$description,
-      gdp_2024 = .data$x2024
+      GeoFIPS = "geo_fips",
+      GeoName = "geo_name",
+      Unit = "unit",
+      Description = "description",
+      gdp_2024 = "x2024"
     ) %>%
     dplyr::mutate(gdp_2024 = readr::parse_number(gdp_2024))
 }
