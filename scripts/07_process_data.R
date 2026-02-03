@@ -136,7 +136,7 @@ if (!is.null(climate_leg)) {
     "Emerging Energy Technologies"
   )
   climate_leg <- climate_leg %>%
-    dplyr::mutate(state = dplyr::coalesce(.data$statename, .data$state))
+    dplyr::mutate(state = dplyr::coalesce(.data$statename, .data$statename))
 
   legislation <- climate_leg %>%
     dplyr::filter(
