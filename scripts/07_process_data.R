@@ -182,7 +182,7 @@ if (!is.null(regdata_raw)) {
       words_num = readr::parse_number(as.character(words)),
       restrictions_scaled = scale_minmax(restrictions_num),
       words_scaled = scale_minmax(words_num),
-      regdata_index = rowMeans(dplyr::select(., restrictions_scaled, words_scaled), na.rm = TRUE)
+      regdata_index = rowMeans(dplyr::pick(restrictions_scaled, words_scaled), na.rm = TRUE)
     ) %>%
     dplyr::transmute(state = jurisdiction, regdata_index)
 }
