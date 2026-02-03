@@ -1,4 +1,6 @@
-if (!exists("processed_inputs", inherits = TRUE)) {
+if (exists("validated_inputs", inherits = TRUE)) {
+  processed_inputs <- validated_inputs
+} else if (!exists("processed_inputs", inherits = TRUE)) {
   paths <- getOption("electrotech.paths")
   if (is.null(paths)) {
     rlang::abort("processed_inputs not found and paths are not configured. Run scripts/00_setup.R first.")
