@@ -178,8 +178,8 @@ if (!is.null(regdata_raw)) {
   regdata <- regdata_raw %>%
     dplyr::filter(country == "United States") %>%
     dplyr::mutate(
-      restrictions_num = readr::parse_number(restrictions),
-      words_num = readr::parse_number(words),
+      restrictions_num = readr::parse_number(as.character(restrictions)),
+      words_num = readr::parse_number(as.character(words)),
       restrictions_scaled = scale_minmax(restrictions_num),
       words_scaled = scale_minmax(words_num),
       regdata_index = rowMeans(dplyr::select(., restrictions_scaled, words_scaled), na.rm = TRUE)
