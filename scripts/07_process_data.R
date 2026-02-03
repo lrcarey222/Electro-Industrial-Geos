@@ -29,10 +29,10 @@ load_state_gdp <- function(raw_dir) {
   if (is.na(gdp_path)) {
     return(tibble::tibble())
   }
-  gdp <- readr::read_csv(
+  gdp <- utils::read.csv(
     gdp_path,
-    show_col_types = FALSE,
-    col_types = readr::cols(.default = readr::col_character())
+    stringsAsFactors = FALSE,
+    check.names = FALSE
   ) %>%
     janitor::clean_names()
   gdp %>%
