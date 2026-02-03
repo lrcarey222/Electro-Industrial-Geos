@@ -1,21 +1,21 @@
 source,type,path,exists
 Good Jobs First/gjf_complete.csv,local,data/raw/Good Jobs First/gjf_complete.csv,TRUE
 dbo_Program.csv,local,data/raw/dbo_Program.csv,TRUE
-climate_leg.csv,local,data/raw/climate_leg.csv,FALSE
+climate_leg.csv,local,data/raw/climate_leg.csv,TRUE
 CPCN_Requirements_and_Enactment_Years_by_State_GPT.csv,local,data/raw/CPCN_Requirements_and_Enactment_Years_by_State_GPT.csv,TRUE
 Regdata_subnational.csv,local,data/raw/Regdata_subnational.csv,TRUE
 Solar Ordinances.csv,local,data/raw/Solar Ordinances.csv,TRUE
 state_sepa.csv,local,data/raw/state_sepa.csv,TRUE
 cnbc_bus_rankings.csv,local,data/raw/cnbc_bus_rankings.csv,TRUE
 BNEF/2025-08-08 - Global Data Center Live IT Capacity Database.xlsx,local,data/raw/BNEF/2025-08-08 - Global Data Center Live IT Capacity Database.xlsx,TRUE
-clean_investment_monitor_q2_2025/quarterly_actual_investment.csv,local,data/raw/clean_investment_monitor_q2_2025/quarterly_actual_investment.csv,FALSE
-clean_investment_monitor_q2_2025/socioeconomics.csv,local,data/raw/clean_investment_monitor_q2_2025/socioeconomics.csv,FALSE
+clean_investment_monitor_q2_2025/quarterly_actual_investment.csv,local,data/raw/clean_investment_monitor_q2_2025/quarterly_actual_investment.csv,TRUE
+clean_investment_monitor_q2_2025/socioeconomics.csv,local,data/raw/clean_investment_monitor_q2_2025/socioeconomics.csv,TRUE
 semiconductor_man.csv,local,data/raw/semiconductor_man.csv,TRUE
 Downloads/state_business_cycle_status.csv,local,data/raw/Downloads/state_business_cycle_status.csv,FALSE
 Downloads/us_drone_facility_announcements_2022_2025.csv,local,data/raw/Downloads/us_drone_facility_announcements_2022_2025.csv,FALSE
 egrid2023_data_metric_rev2.xlsx,local,data/raw/egrid2023_data_metric_rev2.xlsx,TRUE
-table_8.xlsx,local,data/raw/table_8.xlsx,FALSE
-bea_sqgdp,remote,data/raw/remote/SQGDP.zip,TRUE
+table_8.xlsx,local,data/raw/table_8.xlsx,TRUE
+bea_sagdp,remote,data/raw/remote/SAGDP.zip,TRUE
 eig_dynamism,remote,data/raw/remote/Downloadable-Data-EIG-Index-of-State-Dynamism-2022.xlsx,TRUE
 afdc_station_counts,remote,data/raw/remote/historical-station-counts.xlsx,TRUE
 lbnl_interconnection,remote,data/raw/remote/LBNL_Ix_Queue_Data_File_thru2024_v2.xlsx,TRUE
