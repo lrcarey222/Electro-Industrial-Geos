@@ -1,5 +1,13 @@
 if (!exists("processed_inputs", inherits = TRUE)) {
-  rlang::abort("processed_inputs not found. Ensure scripts/07_process_data.R ran successfully.")
+  paths <- getOption("electrotech.paths")
+  if (is.null(paths)) {
+    rlang::abort("processed_inputs not found and paths are not configured. Run scripts/00_setup.R first.")
+  }
+  processed_path <- fs::path(paths$processed_dir, "inputs_processed.csv")
+  if (!fs::file_exists(processed_path)) {
+    rlang::abort("processed_inputs not found. Ensure scripts/07_process_data.R ran successfully.")
+  }
+  processed_inputs <- readr::read_csv(processed_path, show_col_types = FALSE)
 }
 
 policy_intent <- build_policy_intent_index(
