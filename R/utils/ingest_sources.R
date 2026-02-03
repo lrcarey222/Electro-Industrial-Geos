@@ -30,9 +30,9 @@ ingest_legacy_sources <- function(paths, snapshot_date, skip_downloads = FALSE) 
 
   download_sources <- list(
     list(
-      name = "bea_sqgdp",
-      url = "https://apps.bea.gov/regional/zip/SQGDP.zip",
-      filename = "SQGDP.zip"
+      name = "bea_sagdp",
+      url = "https://apps.bea.gov/regional/zip/SAGDP.zip",
+      filename = "SAGDP.zip"
     ),
     list(
       name = "eig_dynamism",
