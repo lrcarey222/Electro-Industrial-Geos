@@ -554,6 +554,37 @@ if (!is.null(semiconductor_raw) && !is.null(socioecon)) {
 }
 semiconductor_investment <- ensure_optional_numeric(semiconductor_investment, "semiconductor_investment")
 
+spot_path <- fs::path(raw_dir, "50 State Gap Analysis.xlsx")
+spot <- tibble::tibble(state = character(), spot_score = numeric())
+if (fs::file_exists(spot_path)) {
+  sheet_names <- readxl::excel_sheets(spot_path)
+  policy_index_df <- purrr::map_dfr(sheet_names, function(sheet_name) {
+    sheet_data <- readxl::read_excel(spot_path, sheet = sheet_name, skip = 1) %>%
+      dplyr::rename(Question = 1, Answer = 2) %>%
+      dplyr::filter(!is.na(.data$Answer)) %>%
+      dplyr::mutate(
+        answer_lower = stringr::str_to_lower(as.character(.data$Answer)),
+        Policy_Index = dplyr::case_when(
+          answer_lower == "yes" ~ 1,
+          answer_lower == "no" ~ 0,
+          stringr::str_detect(answer_lower, "partial|some") ~ 0.5,
+          TRUE ~ NA_real_
+        ),
+        State = sheet_name
+      )
+    sheet_data
+  })
+
+  spot <- policy_index_df %>%
+    dplyr::filter(!is.na(.data$Question)) %>%
+    dplyr::mutate(
+      state = stringr::str_replace_all(.data$State, "_", " "),
+      state = stringr::str_to_title(.data$state)
+    ) %>%
+    dplyr::group_by(.data$state) %>%
+    dplyr::summarize(spot_score = mean(.data$Policy_Index, na.rm = TRUE), .groups = "drop")
+}
+
 raw_updates <- states %>%
   safe_left_join(incentives, by = "state") %>%
   safe_left_join(dev_policy, by = "state") %>%
@@ -561,6 +592,7 @@ raw_updates <- states %>%
   safe_left_join(cpcn, by = "state") %>%
   safe_left_join(regdata, by = "state") %>%
   safe_left_join(ordinance, by = "state") %>%
+  safe_left_join(sepa, by = "state") %>%
   safe_left_join(sepa, by = "state") %>%
   safe_left_join(gdp_growth_index, by = "state") %>%
   safe_left_join(economic_dynamism, by = "state") %>%
@@ -577,6 +609,7 @@ processed_inputs <- processed_inputs %>%
   dplyr::left_join(raw_updates, by = "state", suffix = c("", ".raw")) %>%
   dplyr::mutate(
     incentives_gdp = dplyr::coalesce(`incentives_gdp.raw`, incentives_gdp),
+    spot_score = dplyr::coalesce(`spot_score.raw`, spot_score),
     dev_policy_count = dplyr::coalesce(`dev_policy_count.raw`, dev_policy_count),
     legislation_index = dplyr::coalesce(`legislation_index.raw`, legislation_index),
     cpcn = dplyr::coalesce(`cpcn.raw`, cpcn),
