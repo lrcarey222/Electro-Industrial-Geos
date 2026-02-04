@@ -100,7 +100,7 @@ load_quarterly_gdp_growth <- function(raw_dir, states) {
   }
 
   gdp_raw <- gdp_raw %>%
-    dplyr::mutate(dplyr::across(dplyr::all_of(quarter_cols), readr::parse_number))
+    dplyr::mutate(dplyr::across(dplyr::all_of(quarter_cols), ~ readr::parse_number(as.character(.x))))
 
   quarter_info <- stringr::str_match(quarter_cols, "^x(\\d{4})_q([1-4])$")
   years <- as.integer(quarter_info[, 2])
