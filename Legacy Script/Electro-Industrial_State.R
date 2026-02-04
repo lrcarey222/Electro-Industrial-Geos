@@ -1,4 +1,4 @@
-#Electrotech Index
+#Electro-Industrial Index
 
 
 options(tigris_use_cache = TRUE)
@@ -20,7 +20,7 @@ gjf_statetotal_1924<-gjf %>%
          incent_gdp_rank = rank(-subs_m/X2022))
 
 
-gjf_electrotech <- gjf %>%
+gjf_Electro-Industrial <- gjf %>%
   filter(Major.Industry.of.Parent %in% c(
     "miscellaneous energy products and systems",
     "industrial equipment",
@@ -36,11 +36,11 @@ gjf_electrotech <- gjf %>%
   Specific.Industry.of.Parent != "computers") %>%
   arrange(desc(subs_m))
 
-top_electrotech <- gjf_electrotech %>%
+top_Electro-Industrial <- gjf_Electro-Industrial %>%
   slice_max(order_by=subs_m, n= 25)
-write.csv(top_electrotech,"Downloads/top_electrotech.csv")
+write.csv(top_Electro-Industrial,"Downloads/top_Electro-Industrial.csv")
 
-electrotech_state<-gjf_electrotech %>%
+Electro-Industrial_state<-gjf_Electro-Industrial %>%
   group_by(Location,Specific.Industry.of.Parent) %>% 
   summarize(subs_m=sum(subs_m,na.rm=T)) %>%
   ungroup() %>%
@@ -48,7 +48,7 @@ electrotech_state<-gjf_electrotech %>%
   mutate(incent_gdp=subs_m/X2022*100,
          incent_gdp_rank = rank(-subs_m/X2022))
 
-electrotech_state_tot <- gjf_electrotech %>%
+Electro-Industrial_state_tot <- gjf_Electro-Industrial %>%
   group_by(Location) %>% 
   summarize(subs_m=sum(subs_m,na.rm=T)) %>%
   ungroup() %>%
@@ -56,7 +56,7 @@ electrotech_state_tot <- gjf_electrotech %>%
   mutate(incent_gdp=subs_m/X2022*100,
          incent_gdp_rank = rank(-subs_m/X2022))
 
-electrostate_wide <- electrotech_state %>%
+electrostate_wide <- Electro-Industrial_state %>%
   select(Location,Specific.Industry.of.Parent,subs_m) %>%
   group_by(Location) %>%
   slice_max(order_by=subs_m,n=1) %>%
@@ -66,7 +66,7 @@ electrostate_wide <- electrotech_state %>%
   pivot_wider(names_from=Location,values_from=subs_m) %>%
   write.csv("Downloads/electro_incents.csv")
 
-gjf_electrotech_programs <- gjf_electrotech %>%
+gjf_Electro-Industrial_programs <- gjf_Electro-Industrial %>%
   group_by(Location, Program.Name,Awarding.Agency,Type.of.Subsidy) %>% 
   summarize(subs_m=sum(subs_m,na.rm=T)) %>%
   filter(Program.Name != "multiple")
@@ -215,7 +215,7 @@ ggplot(data=reg_friction_plot,aes(x=ease_index,y=deployment_index))+geom_point()
 
 policy_intent <-states_simple %>%
   rename("State"="full") %>%
-  left_join(electrotech_state_tot %>%
+  left_join(Electro-Industrial_state_tot %>%
   select(Location,incent_gdp),by=c("State"="Location")) %>%
   mutate(incent_gdp = coalesce(incent_gdp, 0)) %>%
   left_join(spot %>%
@@ -225,8 +225,8 @@ policy_intent <-states_simple %>%
   left_join(climate_dev_pol_sum %>%
               rename(economic_development_policy_count=Program_Name),by=c("State")) %>%
   left_join(leg_index %>%
-              rename(electrotech_legislation_index=leg_index),by=c("State"="statename")) %>%
-  mutate(electrotech_legislation_index = coalesce(electrotech_legislation_index, 0)) %>%
+              rename(Electro-Industrial_legislation_index=leg_index),by=c("State"="statename")) %>%
+  mutate(Electro-Industrial_legislation_index = coalesce(Electro-Industrial_legislation_index, 0)) %>%
    mutate(across(
     where(is.numeric), 
     ~ (. - min(.[!is.infinite(.)], na.rm = TRUE)) / 
@@ -271,7 +271,7 @@ fetch_area_year <- purrr::possibly(
   otherwise = NULL
 )
 
-# Iterate over states × years and bind
+# Iterate over states Ã— years and bind
 all_states_qcew <- imap_dfr( # iterates over named vector (names = state abbr)
   state_fips,
   function(fips, abbr) {
@@ -480,14 +480,14 @@ write.csv(top10_league,"Downloads/dynamism.csv")
 #Econ Capabilities Index-----------------------------------
 econ_index <- bundle_lq %>%
   select(state_abbr,LQ_bundle) %>%
-  rename(electrotech_employment_specialization=LQ_bundle) %>%
+  rename(Electro-Industrial_employment_specialization=LQ_bundle) %>%
   left_join(states_simple %>%
               select(abbr,full),by=c("state_abbr"="abbr")) %>%
   left_join(gdp_man_index %>%
               select(GeoName,gdp_index) %>%
-              rename(electrotech_GDP_growth_index=gdp_index),by=c("full"="GeoName")) %>%
+              rename(Electro-Industrial_GDP_growth_index=gdp_index),by=c("full"="GeoName")) %>%
   left_join(feas_state %>%
-              rename(electrotech_feasibility_index=industry_feas_perc),by=c("full"="geo_name")) %>%
+              rename(Electro-Industrial_feasibility_index=industry_feas_perc),by=c("full"="geo_name")) %>%
   left_join(dynamism %>%
               select(state_abbreviation,combined_score) %>%
               rename(economic_dynamism=combined_score),by=c("state_abbr"="state_abbreviation")) %>%
@@ -869,10 +869,10 @@ deployment_index<-investment_state %>%
 write.csv(deployment_index,"Downloads/deployment.csv")
 
 
-#ElectroTech Index -----------------------
+#Electro-Industrial Index -----------------------
 weights <- c(deployment_index = 0.4, infra_index = 0.15, econ_index = 0.15, intent_index = 0.2,cluster_index=0.2,ease_index=0.2)
 
-electrotech <- deployment_index %>%
+Electro-Industrial <- deployment_index %>%
   select(State,full,deployment_index) %>%
   left_join(infrastructure_index %>%
               select(geo_name,infra_index),by=c("full"="geo_name")) %>%
@@ -890,26 +890,26 @@ electrotech <- deployment_index %>%
       (max(.[!is.infinite(.)] - min(.[!is.infinite(.)], na.rm = TRUE), na.rm = TRUE))
   )) %>%
   ungroup() %>%
-  mutate(electrotech_index = rowSums(across(where(is.numeric)), na.rm = TRUE)) %>%
+  mutate(Electro-Industrial_index = rowSums(across(where(is.numeric)), na.rm = TRUE)) %>%
   mutate(
-    electrotech_index_w = {
+    Electro-Industrial_index_w = {
       m <- as.matrix(pick(all_of(names(weights))))
       num <- rowSums(t(t(m) * weights), na.rm = TRUE)
       den <- rowSums(t(t(!is.na(m)) * weights))
       num / den
     }
   ) %>%
-  mutate(electrotech_index_w=rescale(electrotech_index_w,to=c(0,1))) %>%
-  arrange(desc(electrotech_index_w)) %>%
-  mutate(electro_high = dense_rank(desc(electrotech_index_w)) <= 10,
-         electro_high_name=ifelse(electrotech_index_w>0.6,State,"")) %>%
-  arrange(desc(electrotech_index_w))
+  mutate(Electro-Industrial_index_w=rescale(Electro-Industrial_index_w,to=c(0,1))) %>%
+  arrange(desc(Electro-Industrial_index_w)) %>%
+  mutate(electro_high = dense_rank(desc(Electro-Industrial_index_w)) <= 10,
+         electro_high_name=ifelse(Electro-Industrial_index_w>0.6,State,"")) %>%
+  arrange(desc(Electro-Industrial_index_w))
 
-write.csv(electrotech %>%
-            arrange(desc(electrotech_index)),"Downloads/electrotech.csv")
+write.csv(Electro-Industrial %>%
+            arrange(desc(Electro-Industrial_index)),"Downloads/Electro-Industrial.csv")
 
 
-df <- electrotech %>%
+df <- Electro-Industrial %>%
   select(State, full, intent_index, deployment_index, econ_index, infra_index) %>%
   mutate(across(c(intent_index, deployment_index, econ_index, infra_index),
                 ~ pmin(pmax(.x, 0), 1))) %>%  # clamp to [0,1] just in case
@@ -948,19 +948,19 @@ electro_df <- df %>%
 
 write.csv(electro_df,"Downloads/electro_df.csv")
 
-electrotech_div <- electrotech %>%
+Electro-Industrial_div <- Electro-Industrial %>%
   left_join(census_divisions,by=c("State"="State.Code")) %>%
   group_by(Division) %>%
-  summarize(electrotech_index=mean(electrotech_index,na.rm=T))
+  summarize(Electro-Industrial_index=mean(Electro-Industrial_index,na.rm=T))
 
-elec_price<- electrotech %>%
+elec_price<- Electro-Industrial %>%
   left_join(ind_price,by=c("State"="State"))
 # select only numeric columns
 num_vars <- elec_price %>%
   dplyr::select(where(is.numeric))
 
 
-# Multi-sheet Excel export of Electrotech indices & components
+# Multi-sheet Excel export of Electro-Industrial indices & components
 # ------------------------------------------------------------
 # Requires: openxlsx, dplyr, stringr (and your previously built data frames)
 # Tabs written:
@@ -968,7 +968,7 @@ num_vars <- elec_price %>%
 #  - Deployment
 #  - Economic_Capabilities
 #  - Infrastructure
-#  - Electrotech_Combined
+#  - Electro-Industrial_Combined
 
 library(openxlsx)
 library(dplyr)
@@ -1052,20 +1052,20 @@ add_index_sheet(wb,
                 sheet_name = "Top Cluster",
                 index_cols = c("cluster_index"))
 
-# 5) Electrotech (combined) tab
-#    Common index columns: electrotech_index and electrotech_index_w
+# 5) Electro-Industrial (combined) tab
+#    Common index columns: Electro-Industrial_index and Electro-Industrial_index_w
 add_index_sheet(wb,
-                obj_name  = "electrotech",
-                sheet_name = "Electrotech_Combined",
-                index_cols = c("electrotech_index","electrotech_index_w",
+                obj_name  = "Electro-Industrial",
+                sheet_name = "Electro-Industrial_Combined",
+                index_cols = c("Electro-Industrial_index","Electro-Industrial_index_w",
                                # keep the sub-indexes grouped at the end if present
                                "deployment_index","infra_index","econ_index","intent_index","cluster_index"))
 
 # (Optional) a README tab with brief notes pulled from the column names
-if (exists("electrotech", inherits = TRUE)) {
+if (exists("Electro-Industrial", inherits = TRUE)) {
   notes <- data.frame(
-    Sheet = c("Policy_Intent","Deployment","Economic_Capabilities","Infrastructure","Electrotech_Combined"),
-    Index_Column = c("intent_index","deployment_index","econ_index","infra_index (+ infra_index_w)","electrotech_index (+ electrotech_index_w)"),
+    Sheet = c("Policy_Intent","Deployment","Economic_Capabilities","Infrastructure","Electro-Industrial_Combined"),
+    Index_Column = c("intent_index","deployment_index","econ_index","infra_index (+ infra_index_w)","Electro-Industrial_index (+ Electro-Industrial_index_w)"),
     Notes = c(
       "Built from incentives-to-GDP, SPOT, active dev-policy counts, and energy/clean-tech legislation progress (all 0-1).",
       "Built from investment/GDP, renewable capacity growth/share, data-center IT MW, semiconductor inv/GDP, EVs per capita (0-1).",
@@ -1081,7 +1081,7 @@ if (exists("electrotech", inherits = TRUE)) {
 }
 
 # Save workbook
-out_path <- file.path(getwd(), "Downloads/Electrotech_Index_Tables.xlsx")
+out_path <- file.path(getwd(), "Downloads/Electro-Industrial_Index_Tables.xlsx")
 saveWorkbook(wb, out_path, overwrite = TRUE)
 
 message(sprintf("Wrote Excel to: %s", out_path))
@@ -1089,19 +1089,19 @@ message(sprintf("Wrote Excel to: %s", out_path))
 
 
 
-#ELectrotech v Growth
+#Electro-Industrial v Growth
 econ_risk<-read.csv("Downloads/state_business_cycle_status.csv")
 
-electrotech_econ <- electrotech %>%
-  select(State,full,electrotech_index,electrotech_index_w) %>%
+Electro-Industrial_econ <- Electro-Industrial %>%
+  select(State,full,Electro-Industrial_index,Electro-Industrial_index_w) %>%
   left_join(econ_risk,by=c("full"="State"))
 
 
-ggplot(data=electrotech_econ,aes(x=Risk,y=electrotech_index,size=`Share.of.U.S..GDP...`))+geom_point()+theme_minimal()
+ggplot(data=Electro-Industrial_econ,aes(x=Risk,y=Electro-Industrial_index,size=`Share.of.U.S..GDP...`))+geom_point()+theme_minimal()
 
 
 
-#ELectrotech Facilities Chart------------------------------
+#Electro-Industrial Facilities Chart------------------------------
 median_scurve <- function(x, gamma = 0.5) {
   # 1) turn raw x into a [0,1] percentile
   r <- dplyr::percent_rank(x)
@@ -1188,7 +1188,7 @@ datacenter_fac <-BNEF_POINTS %>%
     select(name=Company,cat,tech,size=Investment_USD_millions,Longitude,Latitude,unit)
 
   
-electrotech_fac<-rbind(facilities_cim_electro,datacenter_fac) %>%
+Electro-Industrial_fac<-rbind(facilities_cim_electro,datacenter_fac) %>%
   rbind(semi_fac) %>%
   rbind(elec_fac) %>%
   rbind(drones_fac2) %>%
@@ -1199,11 +1199,11 @@ electrotech_fac<-rbind(facilities_cim_electro,datacenter_fac) %>%
   mutate(size=ifelse(unit=="MW",size*0.66,size))
 
 
-write.csv(electrotech_fac,"Downloads/electrotech_fac.csv")
+write.csv(Electro-Industrial_fac,"Downloads/Electro-Industrial_fac.csv")
 
 
 #By State
-electrotech_fac <- bind_rows(facilities_cim_electro, datacenter_fac, semi_fac, elec_fac) %>%
+Electro-Industrial_fac <- bind_rows(facilities_cim_electro, datacenter_fac, semi_fac, elec_fac) %>%
   filter(!is.na(Longitude), !is.na(Latitude)) %>%
   st_as_sf(coords = c("Longitude","Latitude"), crs = 4326, remove = FALSE)
 
@@ -1213,19 +1213,19 @@ states <- st_transform(states, 4326)
 
 # 3) Spatial join: attach state attrs to each point
 # Use st_intersects (robust for boundary points); st_within also works.
-electrotech_fac <- st_join(
-  electrotech_fac,
+Electro-Industrial_fac <- st_join(
+  Electro-Industrial_fac,
   states %>% select(state_abbr = STUSPS, STATE),  # adjust to your column names
   join = st_intersects,
   left = TRUE
 )
 
 # 4) If you want a plain data.frame again:
-electrotech_fac_df <- st_drop_geometry(electrotech_fac) %>%
+Electro-Industrial_fac_df <- st_drop_geometry(Electro-Industrial_fac) %>%
   group_by(state_abbr,STATE,cat,unit) %>%
   summarize(size=sum(size,na.rm=T))
 
-state_electro_wide<-electrotech_fac_df %>%
+state_electro_wide<-Electro-Industrial_fac_df %>%
   filter(state_abbr %in% target_states) %>%
   ungroup() %>%
   select(state_abbr,cat,size) %>%
@@ -1235,7 +1235,7 @@ write.csv(state_electro_wide,"Downloads/state_electro.csv")
 
 
 #Economic Areas Facilities
-electrotech_fac <- bind_rows(facilities_cim_electro, datacenter_fac, semi_fac, elec_fac) %>%
+Electro-Industrial_fac <- bind_rows(facilities_cim_electro, datacenter_fac, semi_fac, elec_fac) %>%
   filter(!is.na(Longitude), !is.na(Latitude)) %>%
   st_as_sf(coords = c("Longitude","Latitude"), crs = 4326, remove = FALSE)
 
@@ -1252,21 +1252,21 @@ pea <- st_transform(pea, 4326)
 
 # 3) Spatial join: attach state attrs to each point
 # Use st_intersects (robust for boundary points); st_within also works.
-electrotech_fac <- st_join(
-  electrotech_fac,
+Electro-Industrial_fac <- st_join(
+  Electro-Industrial_fac,
   pea %>% select(PEA_Name),  # adjust to your column names
   join = st_intersects,
   left = TRUE
 )
 
 # 4) If you want a plain data.frame again:
-electrotech_fac_ea <- st_drop_geometry(electrotech_fac) %>%
+Electro-Industrial_fac_ea <- st_drop_geometry(Electro-Industrial_fac) %>%
   group_by(PEA_Name,cat,tech,unit) %>%
   summarize(size=sum(size,na.rm=T)) %>%
   left_join(cluster_index,by=c("PEA_Name"="economic_area"))
-write.csv(electrotech_fac_ea,"Downloads/ea_electro.csv")  
+write.csv(Electro-Industrial_fac_ea,"Downloads/ea_electro.csv")  
 
-state_electro_wide<-electrotech_fac_df %>%
+state_electro_wide<-Electro-Industrial_fac_df %>%
   filter(state_abbr %in% target_states) %>%
   ungroup() %>%
   select(state_abbr,cat,size) %>%
@@ -2515,7 +2515,7 @@ gt_tbl <- score_df %>%
   tab_source_note(
     md(paste0(
       "**Notes.** *Job quality* thresholds (vs metro median): **Great** > 33%; **Good** > +10%; **Fair** ???2% to +5%; **Weak** < ???2%. ",
-      "**Specialization** = metro employment share for the family ÷ U.S. share (LQ).  ",
+      "**Specialization** = metro employment share for the family Ã· U.S. share (LQ).  ",
       "**Occupations included** - ",
       make_note, " | ", build_note, " | ", run_note, " | ", enable_note, "."
     ))

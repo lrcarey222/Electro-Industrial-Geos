@@ -1,10 +1,10 @@
-citHeader("Electrotech Index")
+citHeader("Electro-Industrial Index")
 
 citEntry(
   entry = "Manual",
-  title = "Electrotech Index",
+  title = "Electro-Industrial Index",
   author = person("OpenAI Codex"),
   year = "2025",
   note = "R package and targets pipeline",
-  textVersion = "OpenAI Codex (2025). Electrotech Index."
+  textVersion = "OpenAI Codex (2025). Electro-Industrial Index."
 )
