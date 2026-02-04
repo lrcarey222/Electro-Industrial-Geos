@@ -7,7 +7,7 @@
 #' @return Invisible TRUE.
 #' @export
 export_outputs <- function(outputs, paths, raw_inputs = NULL, index_definition = NULL) {
-  readr::write_csv(outputs$electrotech, fs::path(paths$output_dir, "electrotech.csv"))
+  readr::write_csv(outputs$Electro-Industrial, fs::path(paths$output_dir, "Electro-Industrial.csv"))
   readr::write_csv(outputs$deployment, fs::path(paths$output_dir, "deployment.csv"))
   readr::write_csv(outputs$regulatory, fs::path(paths$output_dir, "reg_friction.csv"))
   readr::write_csv(outputs$cluster, fs::path(paths$output_dir, "cluster_index.csv"))
@@ -25,12 +25,12 @@ export_outputs <- function(outputs, paths, raw_inputs = NULL, index_definition =
   openxlsx::writeData(wb, "Infrastructure", outputs$infrastructure)
   openxlsx::addWorksheet(wb, "Cluster_Index")
   openxlsx::writeData(wb, "Cluster_Index", outputs$cluster)
-  openxlsx::addWorksheet(wb, "Electrotech_Combined")
-  openxlsx::writeData(wb, "Electrotech_Combined", outputs$electrotech)
+  openxlsx::addWorksheet(wb, "Electro-Industrial_Combined")
+  openxlsx::writeData(wb, "Electro-Industrial_Combined", outputs$Electro-Industrial)
 
   openxlsx::saveWorkbook(
     wb,
-    fs::path(paths$output_dir, "Electrotech_Index_Tables.xlsx"),
+    fs::path(paths$output_dir, "Electro-Industrial_Index_Tables.xlsx"),
     overwrite = TRUE
   )
 
@@ -49,7 +49,7 @@ export_outputs <- function(outputs, paths, raw_inputs = NULL, index_definition =
       indices = outputs,
       definition = index_definition
     )
-    readr::write_csv(audit_table, fs::path(audit_dir, "electrotech_audit_long.csv"))
+    readr::write_csv(audit_table, fs::path(audit_dir, "Electro-Industrial_audit_long.csv"))
   }
 
   invisible(TRUE)

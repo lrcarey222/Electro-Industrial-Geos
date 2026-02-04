@@ -25,14 +25,14 @@ for (f in r_files) {
   source(f)
 }
 
-config <- load_electrotech_config(repo_root)
-weights <- load_electrotech_weights(repo_root)
+config <- load_Electro-Industrial_config(repo_root)
+weights <- load_Electro-Industrial_weights(repo_root)
 index_definition <- load_index_definition(repo_root)
 missing_data <- load_missing_data(repo_root)
-set_electrotech_options(config, weights, index_definition, missing_data)
+set_Electro-Industrial_options(config, weights, index_definition, missing_data)
 
 paths <- resolve_paths(config, repo_root)
-options(electrotech.paths = paths, electrotech.root = repo_root)
+options(Electro-Industrial.paths = paths, Electro-Industrial.root = repo_root)
 
 fs::dir_create(paths$processed_dir, recurse = TRUE)
 fs::dir_create(paths$raw_dir, recurse = TRUE)
