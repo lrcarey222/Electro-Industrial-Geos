@@ -17,6 +17,7 @@ ingest_legacy_sources <- function(paths, snapshot_date, skip_downloads = FALSE) 
     "Regdata_subnational.csv",
     "Solar Ordinances.csv",
     "state_sepa.csv",
+    "50 State Gap Analysis.xlsx",
     "cnbc_bus_rankings.csv",
     "BNEF/2025-08-08 - Global Data Center Live IT Capacity Database.xlsx",
     "clean_investment_monitor_q2_2025/quarterly_actual_investment.csv",
