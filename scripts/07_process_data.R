@@ -56,6 +56,13 @@ ensure_optional_numeric <- function(data, column) {
   )
 }
 
+safe_left_join <- function(x, y, by) {
+  if (is.null(y)) {
+    return(x)
+  }
+  dplyr::left_join(x, y, by = by)
+}
+
 load_state_gdp <- function(raw_dir) {
   zip_path <- fs::path(raw_dir, "remote", "SAGDP.zip")
   if (!fs::file_exists(zip_path)) {
@@ -535,235 +542,24 @@ if (!is.null(semiconductor_raw) && !is.null(socioecon)) {
 }
 semiconductor_investment <- ensure_optional_numeric(semiconductor_investment, "semiconductor_investment")
 
-socioecon_path <- fs::path(raw_dir, "clean_investment_monitor_q2_2025", "socioeconomics.csv")
-socioecon_raw <- read_optional_csv_skip(socioecon_path, skip = 5)
-socioecon <- NULL
-if (!is.null(socioecon_raw)) {
-  socioecon <- socioecon_raw %>%
-    janitor::clean_names() %>%
-    latest_quarter_filter()
-}
-
-investment_path <- fs::path(raw_dir, "clean_investment_monitor_q2_2025", "quarterly_actual_investment.csv")
-investment_raw <- read_optional_csv_skip(investment_path, skip = 5)
-clean_investment <- NULL
-if (!is.null(investment_raw) && !is.null(socioecon)) {
-  investment_raw <- investment_raw %>% janitor::clean_names()
-  investment_state <- investment_raw %>%
-    dplyr::filter(.data$technology %in% c("Batteries", "Solar", "Nuclear", "Zero Emission Vehicles")) %>%
-    dplyr::mutate(
-      tech = dplyr::if_else(.data$segment == "Manufacturing", paste(.data$technology, .data$segment), .data$technology)
-    ) %>%
-    dplyr::group_by(.data$state, .data$tech) %>%
-    dplyr::summarize(inv = sum(.data$estimated_actual_quarterly_expenditure, na.rm = TRUE), .groups = "drop") %>%
-    dplyr::left_join(socioecon %>% dplyr::select(state, state_name, real_gdp), by = c("state" = "state")) %>%
-    dplyr::mutate(inv_gdp = .data$inv / .data$real_gdp) %>%
-    dplyr::select(state, tech, inv_gdp) %>%
-    tidyr::pivot_wider(names_from = .data$tech, values_from = .data$inv_gdp)
-
-  clean_investment <- investment_state %>%
-    dplyr::mutate(dplyr::across(where(is.numeric), scale_minmax)) %>%
-    dplyr::mutate(clean_tech_investment = rowmean_index(dplyr::select(., where(is.numeric)))) %>%
-    dplyr::left_join(states, by = c("state" = "abbr")) %>%
-    dplyr::transmute(state = .data$state.y, clean_tech_investment)
-}
-
-eig_path <- fs::path(raw_dir, "remote", "Downloadable-Data-EIG-Index-of-State-Dynamism-2022.xlsx")
-eig_raw <- read_optional_xlsx(eig_path, sheet = 1, start_row = 1)
-economic_dynamism <- NULL
-if (!is.null(eig_raw)) {
-  eig_raw <- eig_raw %>% janitor::clean_names()
-  if ("year" %in% names(eig_raw)) {
-    eig_raw <- eig_raw %>% dplyr::filter(.data$year == max(.data$year, na.rm = TRUE))
-  }
-  economic_dynamism <- eig_raw %>%
-    dplyr::select(state_abbreviation, combined_score) %>%
-    dplyr::left_join(states, by = c("state_abbreviation" = "abbr")) %>%
-    dplyr::transmute(state = .data$state, economic_dynamism = .data$combined_score)
-}
-
-gdp_growth_index <- load_quarterly_gdp_growth(raw_dir, states)
-
-ev_station_path <- fs::path(raw_dir, "remote", "historical-station-counts.xlsx")
-ev_station_raw <- read_optional_xlsx(ev_station_path, sheet = 2, start_row = 3)
-ev_station <- NULL
-if (!is.null(ev_station_raw) && !is.null(socioecon)) {
-  ev_station_raw <- ev_station_raw %>% janitor::clean_names()
-  state_col <- if ("state" %in% names(ev_station_raw)) "state" else names(ev_station_raw)[1]
-  numeric_cols <- names(dplyr::select(ev_station_raw, where(is.numeric)))
-  count_candidates <- intersect(c("total_chargers", "total_charging", "total_evse", "total_stations"), names(ev_station_raw))
-  count_col <- if (length(count_candidates) > 0) count_candidates[1] else if (length(numeric_cols) > 0) tail(numeric_cols, 1) else NA_character_
-
-  if (!is.na(count_col)) {
-    ev_station <- ev_station_raw %>%
-      dplyr::transmute(
-        state_raw = .data[[state_col]],
-        total_chargers = .data[[count_col]]
-      ) %>%
-      dplyr::mutate(
-        state_raw = stringr::str_trim(as.character(.data$state_raw)),
-        state = dplyr::case_when(
-          nchar(.data$state_raw) == 2 ~ states$state[match(.data$state_raw, states$abbr)],
-          TRUE ~ .data$state_raw
-        )
-      ) %>%
-      dplyr::left_join(socioecon %>% dplyr::select(state_name, population), by = c("state" = "state_name")) %>%
-      dplyr::mutate(ev_stations_cap = .data$total_chargers / .data$population) %>%
-      dplyr::transmute(state = .data$state, ev_stations_cap)
-  }
-}
-
-queue_path <- fs::path(raw_dir, "remote", "LBNL_Ix_Queue_Data_File_thru2024_v2.xlsx")
-queue_raw <- read_optional_xlsx(queue_path, sheet = 6, start_row = 2)
-interconnection_queue <- NULL
-if (!is.null(queue_raw)) {
-  queue_raw <- queue_raw %>% janitor::clean_names()
-  mw_col <- intersect(c("mw1", "mw"), names(queue_raw))[1]
-  if (!is.na(mw_col)) {
-    queue <- queue_raw %>%
-      dplyr::filter(.data$q_status != "withdrawn") %>%
-      dplyr::group_by(.data$state, .data$q_status) %>%
-      dplyr::summarize(mw = sum(.data[[mw_col]], na.rm = TRUE), .groups = "drop") %>%
-      tidyr::pivot_wider(names_from = .data$q_status, values_from = mw) %>%
-      dplyr::mutate(interconnection_queue = .data$active / .data$operational) %>%
-      dplyr::left_join(states, by = c("state" = "abbr")) %>%
-      dplyr::transmute(state = .data$state.y, interconnection_queue)
-    interconnection_queue <- queue
-  }
-}
-
-eia_path <- fs::path(raw_dir, "remote", "sales_revenue.xlsx")
-eia_raw <- read_optional_xlsx(eia_path, sheet = 1, start_row = 3)
-electricity_price <- NULL
-if (!is.null(eia_raw)) {
-  eia_raw <- eia_raw %>% janitor::clean_names()
-  price_col <- intersect(names(eia_raw), names(eia_raw)[stringr::str_detect(names(eia_raw), "cents.*kwh")])[1]
-  if (!is.na(price_col)) {
-    ind_price_m <- eia_raw %>%
-      dplyr::mutate(ind_price_m = .data[[price_col]]) %>%
-      dplyr::select(state, year, month, ind_price_m)
-
-    ind_price <- ind_price_m %>%
-      dplyr::group_by(.data$state, .data$year) %>%
-      dplyr::summarize(ind_price = mean(.data$ind_price_m, na.rm = TRUE), .groups = "drop") %>%
-      dplyr::filter(.data$year %in% c(2014, 2019, 2024)) %>%
-      tidyr::pivot_wider(names_from = .data$year, values_from = .data$ind_price) %>%
-      dplyr::mutate(
-        ind_price_10yr = (`2024` / `2014` - 1) * 100,
-        ind_price_5yr = (`2024` / `2019` - 1) * 100,
-        ind_price_cents_kwh = .data$`2024`
-      ) %>%
-      dplyr::select(.data$state, ind_price_10yr, ind_price_5yr, ind_price_cents_kwh) %>%
-      dplyr::mutate(dplyr::across(where(is.numeric), scale_minmax)) %>%
-      dplyr::mutate(price_index = 1 - rowmean_index(dplyr::select(., where(is.numeric)))) %>%
-      dplyr::left_join(states, by = c("state" = "abbr")) %>%
-      dplyr::transmute(state = .data$state.y, electricity_price = .data$price_index)
-
-    electricity_price <- ind_price
-  }
-}
-
-cnbc_path <- fs::path(raw_dir, "cnbc_bus_rankings.csv")
-cnbc_raw <- read_optional_csv(cnbc_path)
-cnbc_rank <- NULL
-if (!is.null(cnbc_raw)) {
-  cnbc_raw <- cnbc_raw %>% janitor::clean_names()
-  infra_col <- intersect(c("infrastructure", "infrastructure_rank"), names(cnbc_raw))[1]
-  state_col <- intersect(c("state", "state_name"), names(cnbc_raw))[1]
-  if (!is.na(infra_col) && !is.na(state_col)) {
-    cnbc_rank <- cnbc_raw %>%
-      dplyr::transmute(state = .data[[state_col]], cnbc_rank = .data[[infra_col]])
-  }
-}
-
-datacenter_path <- fs::path(raw_dir, "BNEF", "2025-08-08 - Global Data Center Live IT Capacity Database.xlsx")
-datacenter_raw <- read_optional_xlsx(datacenter_path, sheet = "Data Centers", start_row = 8)
-datacenter_index <- NULL
-if (!is.null(datacenter_raw)) {
-  datacenter_raw <- datacenter_raw %>% janitor::clean_names()
-  if ("market" %in% names(datacenter_raw)) {
-    datacenter_raw <- datacenter_raw %>% dplyr::filter(.data$market == "US")
-  }
-  state_col <- names(datacenter_raw)[stringr::str_detect(names(datacenter_raw), "state")][1]
-  capacity_cols <- intersect(c("headline_capacity_mw", "under_construction_capacity_mw", "committed_capacity_mw"), names(datacenter_raw))
-  if (!is.na(state_col) && length(capacity_cols) > 0) {
-    datacenter_index <- datacenter_raw %>%
-      dplyr::group_by(.data[[state_col]]) %>%
-      dplyr::summarize(dplyr::across(dplyr::all_of(capacity_cols), ~ sum(.x, na.rm = TRUE)), .groups = "drop") %>%
-      dplyr::mutate(state_raw = .data[[state_col]]) %>%
-      dplyr::select(-dplyr::all_of(state_col)) %>%
-      dplyr::mutate(
-        state_raw = stringr::str_trim(as.character(.data$state_raw)),
-        state = dplyr::case_when(
-          nchar(.data$state_raw) == 2 ~ states$state[match(.data$state_raw, states$abbr)],
-          TRUE ~ .data$state_raw
-        )
-      ) %>%
-      dplyr::mutate(dplyr::across(dplyr::all_of(capacity_cols), scale_minmax)) %>%
-      dplyr::mutate(datacenter_index = rowmean_index(dplyr::select(., dplyr::all_of(capacity_cols)))) %>%
-      dplyr::transmute(state = .data$state, datacenter_index)
-  }
-}
-
-evs_path <- fs::path(raw_dir, "remote", "10962-ev-registration-counts-by-state_9-06-24.xlsx")
-evs_raw <- read_optional_xlsx(evs_path, sheet = 1, start_row = 3)
-evs_per_capita <- NULL
-if (!is.null(evs_raw) && !is.null(socioecon)) {
-  evs_raw <- evs_raw %>% janitor::clean_names()
-  state_col <- intersect(c("state", "state_name"), names(evs_raw))[1]
-  reg_col <- intersect(c("registration_count", "registration_counts", "registrations"), names(evs_raw))[1]
-  if (!is.na(state_col) && !is.na(reg_col)) {
-    evs_per_capita <- evs_raw %>%
-      dplyr::transmute(state_raw = .data[[state_col]], ev_reg = .data[[reg_col]]) %>%
-      dplyr::mutate(
-        state_raw = stringr::str_trim(as.character(.data$state_raw)),
-        state = dplyr::case_when(
-          nchar(.data$state_raw) == 2 ~ states$state[match(.data$state_raw, states$abbr)],
-          TRUE ~ .data$state_raw
-        )
-      ) %>%
-      dplyr::left_join(socioecon %>% dplyr::select(state_name, population), by = c("state" = "state_name")) %>%
-      dplyr::mutate(evs_per_capita = .data$ev_reg / .data$population) %>%
-      dplyr::transmute(state = .data$state, evs_per_capita)
-  }
-}
-
-semiconductor_path <- fs::path(raw_dir, "semiconductor_man.csv")
-semiconductor_raw <- read_optional_csv(semiconductor_path)
-semiconductor_investment <- NULL
-if (!is.null(semiconductor_raw) && !is.null(socioecon)) {
-  semiconductor_raw <- semiconductor_raw %>% janitor::clean_names()
-  project_col <- intersect(c("project_size", "project_size_text", "project_size_usd"), names(semiconductor_raw))[1]
-  if (!is.na(project_col)) {
-    semiconductor_investment <- semiconductor_raw %>%
-      dplyr::mutate(project_size_usd = readr::parse_number(.data[[project_col]])) %>%
-      dplyr::group_by(.data$state) %>%
-      dplyr::summarize(project_size_usd = sum(.data$project_size_usd, na.rm = TRUE), .groups = "drop") %>%
-      dplyr::left_join(socioecon %>% dplyr::select(state, real_gdp), by = c("state" = "state")) %>%
-      dplyr::mutate(semiconductor_investment = (.data$project_size_usd / 1000000) / .data$real_gdp) %>%
-      dplyr::left_join(states, by = c("state" = "abbr")) %>%
-      dplyr::transmute(state = .data$state.y, semiconductor_investment)
-  }
-}
-
 raw_updates <- states %>%
-  dplyr::left_join(incentives, by = "state") %>%
-  dplyr::left_join(dev_policy, by = "state") %>%
-  dplyr::left_join(legislation, by = "state") %>%
-  dplyr::left_join(cpcn, by = "state") %>%
-  dplyr::left_join(regdata, by = "state") %>%
-  dplyr::left_join(ordinance, by = "state") %>%
-  dplyr::left_join(sepa, by = "state") %>%
-  dplyr::left_join(gdp_growth_index, by = "state") %>%
-  dplyr::left_join(economic_dynamism, by = "state") %>%
-  dplyr::left_join(ev_station, by = "state") %>%
-  dplyr::left_join(interconnection_queue, by = "state") %>%
-  dplyr::left_join(electricity_price, by = "state") %>%
-  dplyr::left_join(cnbc_rank, by = "state") %>%
-  dplyr::left_join(clean_investment, by = "state") %>%
-  dplyr::left_join(datacenter_index, by = "state") %>%
-  dplyr::left_join(semiconductor_investment, by = "state") %>%
-  dplyr::left_join(evs_per_capita, by = "state")
+  safe_left_join(incentives, by = "state") %>%
+  safe_left_join(dev_policy, by = "state") %>%
+  safe_left_join(legislation, by = "state") %>%
+  safe_left_join(cpcn, by = "state") %>%
+  safe_left_join(regdata, by = "state") %>%
+  safe_left_join(ordinance, by = "state") %>%
+  safe_left_join(sepa, by = "state") %>%
+  safe_left_join(gdp_growth_index, by = "state") %>%
+  safe_left_join(economic_dynamism, by = "state") %>%
+  safe_left_join(ev_station, by = "state") %>%
+  safe_left_join(interconnection_queue, by = "state") %>%
+  safe_left_join(electricity_price, by = "state") %>%
+  safe_left_join(cnbc_rank, by = "state") %>%
+  safe_left_join(clean_investment, by = "state") %>%
+  safe_left_join(datacenter_index, by = "state") %>%
+  safe_left_join(semiconductor_investment, by = "state") %>%
+  safe_left_join(evs_per_capita, by = "state")
 
 processed_inputs <- processed_inputs %>%
   dplyr::left_join(raw_updates, by = "state", suffix = c("", ".raw")) %>%
