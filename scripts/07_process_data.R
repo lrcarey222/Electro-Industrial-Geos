@@ -1,3 +1,4 @@
+# ---- Configuration -------------------------------------------------------
 paths <- getOption("electrotech.paths")
 config <- getOption("electrotech.config")
 
@@ -8,6 +9,7 @@ if (is.null(paths) || is.null(config)) {
 raw_dir <- paths$raw_dir
 states <- tibble::tibble(state = state.name, abbr = state.abb)
 
+# ---- Helpers -------------------------------------------------------------
 read_optional_csv <- function(path) {
   if (fs::file_exists(path)) {
     readr::read_csv(path, show_col_types = FALSE)
@@ -63,6 +65,7 @@ safe_left_join <- function(x, y, by) {
   dplyr::left_join(x, y, by = by)
 }
 
+# ---- GDP + Growth Index --------------------------------------------------
 load_state_gdp <- function(raw_dir) {
   zip_path <- fs::path(raw_dir, "remote", "SAGDP.zip")
   if (!fs::file_exists(zip_path)) {
@@ -154,6 +157,7 @@ load_quarterly_gdp_growth <- function(raw_dir, states) {
     dplyr::transmute(state = .data$geo_name, gdp_growth_index)
 }
 
+# ---- Base Inputs ---------------------------------------------------------
 base_inputs <- if (isTRUE(paths$use_sample_data)) {
   load_sample_inputs(paths)
 } else {
@@ -170,6 +174,7 @@ processed_inputs <- states %>%
 
 state_gdp <- load_state_gdp(raw_dir)
 
+# ---- Incentives (Good Jobs First) ----------------------------------------
 gjf_path <- fs::path(raw_dir, "Good Jobs First", "gjf_complete.csv")
 gjf <- read_optional_csv(gjf_path)
 
@@ -204,6 +209,7 @@ if (!is.null(gjf) && nrow(state_gdp) > 0) {
 }
 incentives <- ensure_optional_numeric(incentives, "incentives_gdp")
 
+# ---- Development Policy Programs ----------------------------------------
 dev_pol_path <- fs::path(raw_dir, "dbo_Program.csv")
 dev_pol <- read_optional_csv(dev_pol_path)
 
@@ -230,6 +236,7 @@ if (!is.null(dev_pol)) {
 }
 dev_policy <- ensure_optional_numeric(dev_policy, "dev_policy_count")
 
+# ---- Climate Legislation -------------------------------------------------
 leg_path <- fs::path(raw_dir, "climate_leg.csv")
 climate_leg <- read_optional_csv(leg_path)
 
@@ -268,6 +275,7 @@ if (!is.null(climate_leg)) {
 }
 legislation <- ensure_optional_numeric(legislation, "legislation_index")
 
+# ---- CPCN Requirements ---------------------------------------------------
 cpcn_path <- fs::path(raw_dir, "CPCN_Requirements_and_Enactment_Years_by_State_GPT.csv")
 cpcn_raw <- read_optional_csv(cpcn_path)
 cpcn <- NULL
@@ -281,6 +289,7 @@ if (!is.null(cpcn_raw)) {
 }
 cpcn <- ensure_optional_numeric(cpcn, "cpcn")
 
+# ---- RegData Index -------------------------------------------------------
 regdata_path <- fs::path(raw_dir, "Regdata_subnational.csv")
 regdata_raw <- read_optional_csv(regdata_path)
 regdata <- NULL
@@ -299,6 +308,7 @@ if (!is.null(regdata_raw)) {
 }
 regdata <- ensure_optional_numeric(regdata, "regdata_index")
 
+# ---- Solar Ordinances ----------------------------------------------------
 ordinance_path <- fs::path(raw_dir, "Solar Ordinances.csv")
 ordinance_raw <- read_optional_csv(ordinance_path)
 ordinance <- NULL
@@ -311,6 +321,7 @@ if (!is.null(ordinance_raw)) {
 }
 ordinance <- ensure_optional_numeric(ordinance, "ordinance")
 
+# ---- SEPA Presence -------------------------------------------------------
 sepa_path <- fs::path(raw_dir, "state_sepa.csv")
 sepa_raw <- read_optional_csv(sepa_path)
 sepa <- NULL
@@ -321,6 +332,7 @@ if (!is.null(sepa_raw)) {
 }
 sepa <- ensure_optional_numeric(sepa, "sepa")
 
+# ---- Clean Investment Monitor -------------------------------------------
 socioecon_path <- fs::path(raw_dir, "clean_investment_monitor_q2_2025", "socioeconomics.csv")
 socioecon_raw <- read_optional_csv_skip(socioecon_path, skip = 5)
 socioecon <- NULL
@@ -355,6 +367,7 @@ if (!is.null(investment_raw) && !is.null(socioecon)) {
 }
 clean_investment <- ensure_optional_numeric(clean_investment, "clean_tech_investment")
 
+# ---- Economic Dynamism ---------------------------------------------------
 eig_path <- fs::path(raw_dir, "remote", "Downloadable-Data-EIG-Index-of-State-Dynamism-2022.xlsx")
 eig_raw <- read_optional_xlsx(eig_path, sheet = 1, start_row = 1)
 economic_dynamism <- NULL
@@ -370,9 +383,11 @@ if (!is.null(eig_raw)) {
 }
 economic_dynamism <- ensure_optional_numeric(economic_dynamism, "economic_dynamism")
 
+# ---- GDP Growth Index ----------------------------------------------------
 gdp_growth_index <- load_quarterly_gdp_growth(raw_dir, states)
 gdp_growth_index <- ensure_optional_numeric(gdp_growth_index, "gdp_growth_index")
 
+# ---- EV Stations ---------------------------------------------------------
 ev_station_path <- fs::path(raw_dir, "remote", "historical-station-counts.xlsx")
 ev_station_raw <- read_optional_xlsx(ev_station_path, sheet = 2, start_row = 3)
 ev_station <- NULL
@@ -403,6 +418,7 @@ if (!is.null(ev_station_raw) && !is.null(socioecon)) {
 }
 ev_station <- ensure_optional_numeric(ev_station, "ev_stations_cap")
 
+# ---- Interconnection Queue ----------------------------------------------
 queue_path <- fs::path(raw_dir, "remote", "LBNL_Ix_Queue_Data_File_thru2024_v2.xlsx")
 queue_raw <- read_optional_xlsx(queue_path, sheet = 6, start_row = 2)
 interconnection_queue <- NULL
@@ -423,6 +439,7 @@ if (!is.null(queue_raw)) {
 }
 interconnection_queue <- ensure_optional_numeric(interconnection_queue, "interconnection_queue")
 
+# ---- Electricity Price ---------------------------------------------------
 eia_path <- fs::path(raw_dir, "remote", "sales_revenue.xlsx")
 eia_raw <- read_optional_xlsx(eia_path, sheet = 1, start_row = 3)
 electricity_price <- NULL
@@ -455,6 +472,7 @@ if (!is.null(eia_raw)) {
 }
 electricity_price <- ensure_optional_numeric(electricity_price, "electricity_price")
 
+# ---- CNBC Rankings -------------------------------------------------------
 cnbc_path <- fs::path(raw_dir, "cnbc_bus_rankings.csv")
 cnbc_raw <- read_optional_csv(cnbc_path)
 cnbc_rank <- NULL
@@ -469,48 +487,53 @@ if (!is.null(cnbc_raw)) {
 }
 cnbc_rank <- ensure_optional_numeric(cnbc_rank, "cnbc_rank")
 
+# ---- Data Centers --------------------------------------------------------
 datacenter_path <- fs::path(raw_dir, "BNEF", "2025-08-08 - Global Data Center Live IT Capacity Database.xlsx")
 datacenter_raw <- read_optional_xlsx(datacenter_path, sheet = "Data Centers", start_row = 8)
+datacenter_index <- NULL
+if (!is.null(datacenter_raw)) {
+  # Keep only rows with coordinates
+  datacenter_points <- datacenter_raw %>%
+    dplyr::filter(!is.na(Latitude), !is.na(Longitude)) %>%
+    # keep original lon/lat columns for convenience; add geometry
+    sf::st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326, remove = FALSE)
 
+  options(tigris_use_cache = TRUE)
 
-# Keep only rows with coordinates
-datacenter_points <- datacenter_raw %>%
-  filter(!is.na(Latitude), !is.na(Longitude)) %>%
-  # keep original lon/lat columns for convenience; add geometry
-  st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326, remove = FALSE)
+  states_sf <- tigris::states(cb = TRUE, year = 2023, class = "sf") %>%
+    dplyr::filter(!STUSPS %in% c("PR", "VI", "GU", "MP", "AS")) %>%
+    sf::st_transform(4326) %>% # match your points CRS
+    dplyr::select(STATEFP, STUSPS, STATE = NAME) # keep only useful cols
 
-library(tigris)
+  datacenter_states <- datacenter_points %>%
+    sf::st_join(states_sf, join = sf::st_within, left = TRUE) %>%
+    sf::st_drop_geometry() %>%
+    dplyr::filter(Date == "2025-03-31") %>%
+    dplyr::group_by(STATE) %>%
+    dplyr::summarize(
+      headline_mw = sum(`Headline Capacity (MW)`, na.rm = TRUE),
+      construction_mw = sum(`Under Construction Capacity (MW)`, na.rm = TRUE),
+      committed_mw = sum(`Committed Capacity (MW)`, na.rm = TRUE)
+    ) %>%
+    dplyr::left_join(states_gen, by = c("STATE" = "State")) %>%
+    dplyr::mutate(datacenter_share = headline_mw / `Nameplate Capacity (MW)`) %>%
+    dplyr::select(STATE, headline_mw, construction_mw, committed_mw, datacenter_share)
 
-options(tigris_use_cache = TRUE)
+  datacenter_index <- datacenter_states %>%
+    dplyr::ungroup() %>%
+    dplyr::select(STATE, committed_mw, datacenter_share) %>%
+    dplyr::mutate(dplyr::across(
+      where(is.numeric),
+      ~ (. - min(.[!is.infinite(.)], na.rm = TRUE)) /
+        (max(.[!is.infinite(.)] - min(.[!is.infinite(.)], na.rm = TRUE), na.rm = TRUE))
+    )) %>%
+    dplyr::ungroup() %>%
+    dplyr::mutate(datacenter_index = rowMeans(dplyr::across(where(is.numeric)), na.rm = TRUE)) %>%
+    dplyr::transmute(state = STATE, datacenter_index)
+}
+datacenter_index <- ensure_optional_numeric(datacenter_index, "datacenter_index")
 
-states <- tigris::states(cb = TRUE, year = 2023, class = "sf") %>%
-  filter(!STUSPS %in% c("PR","VI","GU","MP","AS")) %>%
-  st_transform(4326) %>%                         # match your points CRS
-  select(STATEFP, STUSPS, STATE = NAME) # keep only useful cols
-
-datacenter_states <- datacenter_points %>%
-  st_join(states, join = st_within, left = TRUE) %>%
-  st_drop_geometry() %>%
-  filter(Date=="2025-03-31") %>%
-  group_by(STATE) %>%
-  summarize(headline_mw=sum(`Headline Capacity (MW)`,na.rm=T),
-            construction_mw=sum(`Under Construction Capacity (MW)`,na.rm=T),
-            committed_mw=sum(`Committed Capacity (MW)`,na.rm=T)) %>%
-  left_join(states_gen,by=c("STATE"="State")) %>%
-  mutate(datacenter_share=headline_mw/`Nameplate Capacity (MW)`) %>%
-  select(STATE,headline_mw,construction_mw,committed_mw,datacenter_share)
-
-datacenter_index<-datacenter_states %>%
-  ungroup() %>%
-  select(STATE,committed_mw,datacenter_share) %>%
-  mutate(across(
-    where(is.numeric),
-    ~ (. - min(.[!is.infinite(.)], na.rm = TRUE)) / 
-      (max(.[!is.infinite(.)] - min(.[!is.infinite(.)], na.rm = TRUE), na.rm = TRUE))
-  )) %>%
-  ungroup() %>%
-  mutate(datacenter_index = rowMeans(across(where(is.numeric)), na.rm = TRUE))
-
+# ---- EV Registrations ----------------------------------------------------
 evs_path <- fs::path(raw_dir, "remote", "10962-ev-registration-counts-by-state_9-06-24.xlsx")
 evs_raw <- read_optional_xlsx(evs_path, sheet = 1, start_row = 3)
 evs_per_capita <- NULL
@@ -535,6 +558,7 @@ if (!is.null(evs_raw) && !is.null(socioecon)) {
 }
 evs_per_capita <- ensure_optional_numeric(evs_per_capita, "evs_per_capita")
 
+# ---- Semiconductor Investments ------------------------------------------
 semiconductor_path <- fs::path(raw_dir, "semiconductor_man.csv")
 semiconductor_raw <- read_optional_csv(semiconductor_path)
 semiconductor_investment <- NULL
@@ -554,6 +578,7 @@ if (!is.null(semiconductor_raw) && !is.null(socioecon)) {
 }
 semiconductor_investment <- ensure_optional_numeric(semiconductor_investment, "semiconductor_investment")
 
+# ---- Assemble Updates ----------------------------------------------------
 raw_updates <- states %>%
   safe_left_join(incentives, by = "state") %>%
   safe_left_join(dev_policy, by = "state") %>%
@@ -573,6 +598,7 @@ raw_updates <- states %>%
   safe_left_join(semiconductor_investment, by = "state") %>%
   safe_left_join(evs_per_capita, by = "state")
 
+# ---- Merge + Validate ----------------------------------------------------
 processed_inputs <- processed_inputs %>%
   dplyr::left_join(raw_updates, by = "state", suffix = c("", ".raw")) %>%
   dplyr::mutate(
@@ -606,5 +632,6 @@ if (length(missing_cols) > 0) {
 
 validated_inputs <- validate_inputs_schema(processed_inputs, required_cols)
 
+# ---- Output --------------------------------------------------------------
 processed_path <- fs::path(paths$processed_dir, "inputs_processed.csv")
 readr::write_csv(validated_inputs, processed_path)
