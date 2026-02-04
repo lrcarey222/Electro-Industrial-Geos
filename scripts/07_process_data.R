@@ -428,7 +428,7 @@ eia_raw <- read_optional_xlsx(eia_path, sheet = 1, start_row = 3)
 electricity_price <- NULL
 if (!is.null(eia_raw)) {
   eia_raw <- eia_raw %>% janitor::clean_names()
-  price_col <- intersect(names(eia_raw), names(eia_raw)[stringr::str_detect(names(eia_raw), "cents.*kwh")])[1]
+  price_col <- intersect(names(eia_raw), names(eia_raw)[stringr::str_detect(names(eia_raw), "cents.*k_wh")])[1]
   if (!is.na(price_col)) {
     ind_price_m <- eia_raw %>%
       dplyr::mutate(ind_price_m = .data[[price_col]]) %>%
@@ -460,7 +460,7 @@ cnbc_raw <- read_optional_csv(cnbc_path)
 cnbc_rank <- NULL
 if (!is.null(cnbc_raw)) {
   cnbc_raw <- cnbc_raw %>% janitor::clean_names()
-  infra_col <- intersect(c("infrastructure", "infrastructure_rank"), names(cnbc_raw))[1]
+  infra_col <- intersect(c("infra_structure", "infrastructure_rank", "INFRA"), names(cnbc_raw))[1]
   state_col <- intersect(c("state", "state_name"), names(cnbc_raw))[1]
   if (!is.na(infra_col) && !is.na(state_col)) {
     cnbc_rank <- cnbc_raw %>%
@@ -471,33 +471,45 @@ cnbc_rank <- ensure_optional_numeric(cnbc_rank, "cnbc_rank")
 
 datacenter_path <- fs::path(raw_dir, "BNEF", "2025-08-08 - Global Data Center Live IT Capacity Database.xlsx")
 datacenter_raw <- read_optional_xlsx(datacenter_path, sheet = "Data Centers", start_row = 8)
-datacenter_index <- NULL
-if (!is.null(datacenter_raw)) {
-  datacenter_raw <- datacenter_raw %>% janitor::clean_names()
-  if ("market" %in% names(datacenter_raw)) {
-    datacenter_raw <- datacenter_raw %>% dplyr::filter(.data$market == "US")
-  }
-  state_col <- names(datacenter_raw)[stringr::str_detect(names(datacenter_raw), "state")][1]
-  capacity_cols <- intersect(c("headline_capacity_mw", "under_construction_capacity_mw", "committed_capacity_mw"), names(datacenter_raw))
-  if (!is.na(state_col) && length(capacity_cols) > 0) {
-    datacenter_index <- datacenter_raw %>%
-      dplyr::group_by(.data[[state_col]]) %>%
-      dplyr::summarize(dplyr::across(dplyr::all_of(capacity_cols), ~ sum(.x, na.rm = TRUE)), .groups = "drop") %>%
-      dplyr::mutate(state_raw = .data[[state_col]]) %>%
-      dplyr::select(-dplyr::all_of(state_col)) %>%
-      dplyr::mutate(
-        state_raw = stringr::str_trim(as.character(.data$state_raw)),
-        state = dplyr::case_when(
-          nchar(.data$state_raw) == 2 ~ states$state[match(.data$state_raw, states$abbr)],
-          TRUE ~ .data$state_raw
-        )
-      ) %>%
-      dplyr::mutate(dplyr::across(dplyr::all_of(capacity_cols), scale_minmax)) %>%
-      dplyr::mutate(datacenter_index = rowmean_index(dplyr::select(., dplyr::all_of(capacity_cols)))) %>%
-      dplyr::transmute(state = .data$state, datacenter_index)
-  }
-}
-datacenter_index <- ensure_optional_numeric(datacenter_index, "datacenter_index")
+
+
+# Keep only rows with coordinates
+datacenter_points <- datacenter_raw %>%
+  filter(!is.na(Latitude), !is.na(Longitude)) %>%
+  # keep original lon/lat columns for convenience; add geometry
+  st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326, remove = FALSE)
+
+library(tigris)
+
+options(tigris_use_cache = TRUE)
+
+states <- tigris::states(cb = TRUE, year = 2023, class = "sf") %>%
+  filter(!STUSPS %in% c("PR","VI","GU","MP","AS")) %>%
+  st_transform(4326) %>%                         # match your points CRS
+  select(STATEFP, STUSPS, STATE = NAME) # keep only useful cols
+
+datacenter_states <- datacenter_points %>%
+  st_join(states, join = st_within, left = TRUE) %>%
+  st_drop_geometry() %>%
+  filter(Date=="2025-03-31") %>%
+  group_by(STATE) %>%
+  summarize(headline_mw=sum(`Headline Capacity (MW)`,na.rm=T),
+            construction_mw=sum(`Under Construction Capacity (MW)`,na.rm=T),
+            committed_mw=sum(`Committed Capacity (MW)`,na.rm=T)) %>%
+  left_join(states_gen,by=c("STATE"="State")) %>%
+  mutate(datacenter_share=headline_mw/`Nameplate Capacity (MW)`) %>%
+  select(STATE,headline_mw,construction_mw,committed_mw,datacenter_share)
+
+datacenter_index<-datacenter_states %>%
+  ungroup() %>%
+  select(STATE,committed_mw,datacenter_share) %>%
+  mutate(across(
+    where(is.numeric),
+    ~ (. - min(.[!is.infinite(.)], na.rm = TRUE)) / 
+      (max(.[!is.infinite(.)] - min(.[!is.infinite(.)], na.rm = TRUE), na.rm = TRUE))
+  )) %>%
+  ungroup() %>%
+  mutate(datacenter_index = rowMeans(across(where(is.numeric)), na.rm = TRUE))
 
 evs_path <- fs::path(raw_dir, "remote", "10962-ev-registration-counts-by-state_9-06-24.xlsx")
 evs_raw <- read_optional_xlsx(evs_path, sheet = 1, start_row = 3)
