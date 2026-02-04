@@ -29,6 +29,22 @@ ingest_legacy_sources <- function(paths, snapshot_date, skip_downloads = FALSE) 
     "table_8.xlsx"
   )
 
+  snapshot_date_parsed <- suppressWarnings(as.Date(snapshot_date))
+  if (is.na(snapshot_date_parsed)) {
+    snapshot_date_parsed <- Sys.Date()
+  }
+  generator_date <- seq(snapshot_date_parsed, length.out = 2, by = "-1 month")[2]
+  generator_filename <- paste0(
+    tolower(format(generator_date, "%B")),
+    "_generator",
+    format(generator_date, "%Y"),
+    ".xlsx"
+  )
+  generator_url <- paste0(
+    "https://www.eia.gov/electricity/data/eia860m/xls/",
+    generator_filename
+  )
+
   download_sources <- list(
     list(
       name = "bea_sagdp",
@@ -59,6 +75,11 @@ ingest_legacy_sources <- function(paths, snapshot_date, skip_downloads = FALSE) 
       name = "afdc_ev_registrations",
       url = "https://afdc.energy.gov/files/u/data/data_source/10962/10962-ev-registration-counts-by-state_9-06-24.xlsx?12518e7893",
       filename = "10962-ev-registration-counts-by-state_9-06-24.xlsx"
+    ),
+    list(
+      name = "eia_generator_capacity",
+      url = generator_url,
+      filename = generator_filename
     )
   )
 
