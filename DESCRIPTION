@@ -19,10 +19,12 @@ Imports:
     purrr,
     readr,
     rlang,
+    sf,
     stringr,
     targets,
     tidyr,
     tibble,
+    tigris,
     yaml,
     openxlsx
 Suggests:
