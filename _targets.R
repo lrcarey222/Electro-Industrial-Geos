@@ -13,5 +13,5 @@ tar_option_set(
 )
 
 list(
-  tar_target(pipeline, run_electrotech_pipeline())
+  tar_target(pipeline, run_Electro_Industrial_pipeline())
 )

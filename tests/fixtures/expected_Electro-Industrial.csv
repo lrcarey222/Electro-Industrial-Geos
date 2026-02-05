@@ -1,4 +1,4 @@
-state,abbr,deployment_index,infra_index,econ_index,intent_index,cluster_index,ease_index,electrotech_index,electrotech_index_w
+state,abbr,deployment_index,infra_index,econ_index,intent_index,cluster_index,ease_index,Electro-Industrial_index,Electro-Industrial_index_w
 California,CA,1.0,1.0,1.0,1.0,1.0,0.0,5.0,0.8461538461538461
 Texas,TX,0.0,0.0,0.0,0.0,0.15322580645161357,1.0,1.1532258064516137,0.17741935483870977
 New York,NY,0.44444444444444425,0.05797101449275381,0.41666666666666635,0.40858974358974354,0.0,0.3500000000000001,1.6776718691936081,0.30822413743818416
