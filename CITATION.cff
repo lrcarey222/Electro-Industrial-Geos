@@ -1,5 +1,5 @@
 cff-version: 1.2.0
-title: "Electrotech Index"
+title: "Electro-Industrial Index"
 message: "If you use this software, please cite it."
 type: software
 authors:
@@ -7,4 +7,4 @@ authors:
 version: 0.1.0
 date-released: "2025-01-01"
 license: MIT
-repository-code: "https://example.com/electrotechindex"
+repository-code: "https://example.com/Electro-Industrialindex"
