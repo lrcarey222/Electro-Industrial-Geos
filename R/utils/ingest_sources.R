@@ -29,6 +29,35 @@ ingest_legacy_sources <- function(paths, snapshot_date, skip_downloads = FALSE) 
     "table_8.xlsx"
   )
 
+  snapshot_date_parsed <- suppressWarnings(as.Date(snapshot_date))
+  if (is.na(snapshot_date_parsed)) {
+    snapshot_date_parsed <- Sys.Date()
+  }
+  generator_date <- seq(snapshot_date_parsed, length.out = 2, by = "-1 month")[2]
+  make_generator_source <- function(date) {
+    filename <- paste0(
+      tolower(format(date, "%B")),
+      "_generator",
+      format(date, "%Y"),
+      ".xlsx"
+    )
+    list(
+      url = paste0("https://www.eia.gov/electricity/data/eia860m/xls/", filename),
+      filename = filename
+    )
+  }
+  generator_source <- make_generator_source(generator_date)
+
+  is_valid_xlsx <- function(path) {
+    if (!fs::file_exists(path) || fs::file_size(path) <= 0) {
+      return(FALSE)
+    }
+    con <- file(path, "rb")
+    on.exit(close(con), add = TRUE)
+    sig <- readBin(con, what = "raw", n = 2)
+    identical(sig, charToRaw("PK"))
+  }
+
   download_sources <- list(
     list(
       name = "bea_sagdp",
@@ -59,6 +88,11 @@ ingest_legacy_sources <- function(paths, snapshot_date, skip_downloads = FALSE) 
       name = "afdc_ev_registrations",
       url = "https://afdc.energy.gov/files/u/data/data_source/10962/10962-ev-registration-counts-by-state_9-06-24.xlsx?12518e7893",
       filename = "10962-ev-registration-counts-by-state_9-06-24.xlsx"
+    ),
+    list(
+      name = "eia_generator_capacity",
+      url = generator_source$url,
+      filename = generator_source$filename
     )
   )
 
@@ -79,15 +113,39 @@ ingest_legacy_sources <- function(paths, snapshot_date, skip_downloads = FALSE) 
   download_inventory <- purrr::map_dfr(download_sources, function(src) {
     dest_dir <- fs::path(raw_dir, "remote")
     fs::dir_create(dest_dir, recurse = TRUE)
-    dest_path <- fs::path(dest_dir, src$filename)
+    resolved_src <- src
+    dest_path <- fs::path(dest_dir, resolved_src$filename)
 
     if (!isTRUE(skip_downloads)) {
-      cached <- download_with_cache(src$url, cache_dir, snapshot_date, filename = src$filename)
-      fs::file_copy(cached, dest_path, overwrite = TRUE)
+      if (identical(src$name, "eia_generator_capacity")) {
+        download_result <- NULL
+        for (months_back in 0:12) {
+          candidate_date <- seq(generator_date, length.out = months_back + 1, by = "-1 month")[months_back + 1]
+          candidate_src <- make_generator_source(candidate_date)
+          candidate_cached <- tryCatch(
+            download_with_cache(candidate_src$url, cache_dir, snapshot_date, filename = candidate_src$filename),
+            error = function(e) NULL
+          )
+          if (!is.null(candidate_cached) && is_valid_xlsx(candidate_cached)) {
+            download_result <- candidate_cached
+            resolved_src <- modifyList(src, candidate_src)
+            break
+          }
+        }
+        if (is.null(download_result)) {
+          rlang::warn("Unable to download EIA generator workbook for previous-month candidates (0-12 months back).")
+        } else {
+          dest_path <- fs::path(dest_dir, resolved_src$filename)
+          fs::file_copy(download_result, dest_path, overwrite = TRUE)
+        }
+      } else {
+        cached <- download_with_cache(resolved_src$url, cache_dir, snapshot_date, filename = resolved_src$filename)
+        fs::file_copy(cached, dest_path, overwrite = TRUE)
+      }
     }
 
     tibble::tibble(
-      source = src$name,
+      source = resolved_src$name,
       type = "remote",
       path = dest_path,
       exists = fs::file_exists(dest_path)
