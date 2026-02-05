@@ -472,6 +472,197 @@ if (!is.null(eia_raw)) {
 }
 electricity_price <- ensure_optional_numeric(electricity_price, "electricity_price")
 
+# ---- Electricity Capacity -----------------------------------------------
+generator_dir <- fs::path(raw_dir, "remote")
+fs::dir_create(generator_dir, recurse = TRUE)
+generator_files <- fs::dir_ls(
+  generator_dir,
+  regexp = "^[A-Za-z]+_generator\\d{4}\\.xlsx$",
+  type = "file",
+  fail = FALSE
+)
+generator_months <- setNames(tolower(month.name), tolower(month.name))
+parse_generator_date <- function(path) {
+  filename <- basename(path)
+  match_info <- stringr::str_match(filename, "^([A-Za-z]+)_generator(\\d{4})\\.xlsx$")
+  if (is.na(match_info[1, 1])) {
+    return(NA_real_)
+  }
+  month_key <- tolower(match_info[1, 2])
+  if (!month_key %in% names(generator_months)) {
+    return(NA_real_)
+  }
+  month_num <- base::match(month_key, generator_months)
+  as.numeric(sprintf("%04d%02d", as.integer(match_info[1, 3]), month_num))
+}
+
+make_generator_source <- function(date) {
+  filename <- paste0(
+    tolower(format(date, "%B")),
+    "_generator",
+    format(date, "%Y"),
+    ".xlsx"
+  )
+  list(
+    filename = filename,
+    url = paste0("https://www.eia.gov/electricity/data/eia860m/xls/", filename),
+    path = fs::path(generator_dir, filename)
+  )
+}
+
+is_valid_xlsx <- function(path) {
+  if (!fs::file_exists(path) || fs::file_size(path) <= 0) {
+    return(FALSE)
+  }
+  con <- file(path, "rb")
+  on.exit(close(con), add = TRUE)
+  sig <- readBin(con, what = "raw", n = 2)
+  identical(sig, charToRaw("PK"))
+}
+
+generator_reference_date <- Sys.Date()
+candidate_start <- seq(generator_reference_date, length.out = 2, by = "-1 month")[2]
+
+op_gen_raw <- NULL
+generator_dates <- vapply(generator_files, parse_generator_date, numeric(1))
+latest_generator <- if (length(generator_dates) > 0 && any(!is.na(generator_dates))) {
+  generator_files[which.max(generator_dates)]
+} else {
+  NA_character_
+}
+
+if (!is.na(latest_generator)) {
+  if (is_valid_xlsx(latest_generator)) {
+    op_gen_raw <- suppressWarnings(read_optional_xlsx(latest_generator, sheet = 1, start_row = 3))
+  }
+}
+
+if (is.null(op_gen_raw)) {
+  for (months_back in 0:1) {
+    candidate_date <- seq(candidate_start, length.out = months_back + 1, by = "-1 month")[months_back + 1]
+    candidate_src <- make_generator_source(candidate_date)
+
+    if (!fs::file_exists(candidate_src$path)) {
+      candidate_cached <- tryCatch(
+        download_with_cache(
+          url = candidate_src$url,
+          dest_dir = paths$cache_dir,
+          snapshot_date = paths$snapshot_date,
+          filename = candidate_src$filename
+        ),
+        error = function(e) NULL
+      )
+      if (!is.null(candidate_cached) && is_valid_xlsx(candidate_cached)) {
+        fs::file_copy(candidate_cached, candidate_src$path, overwrite = TRUE)
+      }
+    }
+
+    if (is_valid_xlsx(candidate_src$path)) {
+      candidate_raw <- suppressWarnings(read_optional_xlsx(candidate_src$path, sheet = 1, start_row = 3))
+      if (!is.null(candidate_raw)) {
+        op_gen_raw <- candidate_raw
+        break
+      }
+    }
+  }
+}
+
+states_gen <- tibble::tibble(State = character(), nameplate_capacity_mw = numeric())
+electric_capacity_growth <- NULL
+clean_electric_capacity_growth <- NULL
+if (!is.null(op_gen_raw)) {
+  op_gen_raw <- op_gen_raw %>% janitor::clean_names()
+  required_cols <- c("plant_state", "status", "operating_year", "technology", "nameplate_capacity_mw")
+  if (all(required_cols %in% names(op_gen_raw))) {
+    census_divisions <- tibble::tibble(
+      State = state.name,
+      State.Code = state.abb,
+      Division = as.character(state.division)
+    )
+
+    op_gen <- op_gen_raw %>%
+      dplyr::mutate(
+        tech = dplyr::case_when(
+          .data$technology == "Natural Gas Steam Turbine" ~ "Natural Gas",
+          .data$technology == "Natural Gas Fired Combined Cycle" ~ "Natural Gas",
+          .data$technology == "Natural Gas Internal Combustion Engine" ~ "Natural Gas",
+          .data$technology == "Natural Gas Fired Combustion Turbine" ~ "Natural Gas",
+          .data$technology == "Conventional Steam Coal" ~ "Coal",
+          .data$technology == "Conventional Hydroelectric" ~ "Hydro",
+          .data$technology == "Onshore Wind Turbine" ~ "Wind",
+          .data$technology == "Offshore Wind Turbine" ~ "Wind",
+          .data$technology == "Batteries" ~ "Storage",
+          .data$technology == "Solar Photovoltaic" ~ "Solar",
+          .data$technology == "Solar Thermal with Energy Storage" ~ "Solar",
+          .data$technology == "Hydroelectric Pumped Storage" ~ "Hydro",
+          .data$technology == "Geothermal" ~ "Geothermal",
+          .data$technology == "Wood/Wood Waste Biomass" ~ "Biomass",
+          TRUE ~ NA_character_
+        )
+      )
+
+    states_gen <- op_gen %>%
+      dplyr::filter(.data$status == "(OP) Operating") %>%
+      dplyr::group_by(.data$plant_state) %>%
+      dplyr::summarize(nameplate_capacity_mw = sum(.data$nameplate_capacity_mw, na.rm = TRUE), .groups = "drop") %>%
+      dplyr::left_join(census_divisions, by = c("plant_state" = "State.Code"))
+
+    states_rengen <- op_gen %>%
+      dplyr::filter(.data$status == "(OP) Operating") %>%
+      dplyr::group_by(.data$plant_state, .data$operating_year, .data$technology) %>%
+      dplyr::summarize(nameplate_capacity_mw = sum(.data$nameplate_capacity_mw, na.rm = TRUE), .groups = "drop") %>%
+      dplyr::left_join(census_divisions, by = c("plant_state" = "State.Code")) %>%
+      dplyr::filter(.data$technology %in% c(
+        "Conventional Hydroelectric",
+        "Onshore Wind Turbine",
+        "Batteries",
+        "Nuclear",
+        "Solar Photovoltaic",
+        "Solar Thermal with Energy Storage",
+        "Hydroelectric Pumped Storage",
+        "Geothermal",
+        "Solar Thermal without Energy Storage",
+        "Offshore Wind Turbine"
+      )) %>%
+      dplyr::group_by(.data$Division, .data$State, .data$operating_year) %>%
+      dplyr::summarize(nameplate_capacity_mw = sum(.data$nameplate_capacity_mw, na.rm = TRUE), .groups = "drop") %>%
+      tidyr::complete(operating_year = 2013:2025, fill = list(nameplate_capacity_mw = 0)) %>%
+      dplyr::mutate(Year = lubridate::make_date(.data$operating_year)) %>%
+      dplyr::group_by(.data$Division, .data$State) %>%
+      dplyr::mutate(
+        cum_cap = cumsum(.data$nameplate_capacity_mw),
+        base_cap = .data$cum_cap[.data$Year == "2022-01-01"],
+        cap_index_22 = dplyr::if_else(.data$base_cap > 0, 100 * .data$cum_cap / .data$base_cap, NA_real_),
+        rengrowth_22_25 = .data$cum_cap - .data$base_cap
+      ) %>%
+      dplyr::select(-.data$base_cap)
+
+    states_rengen_2025 <- states_rengen %>%
+      dplyr::filter(.data$operating_year == 2025) %>%
+      dplyr::ungroup() %>%
+      dplyr::select(.data$State, .data$cum_cap, .data$cap_index_22, .data$rengrowth_22_25) %>%
+      dplyr::left_join(
+        states_gen %>% dplyr::select(.data$State, .data$nameplate_capacity_mw),
+        by = "State"
+      ) %>%
+      dplyr::mutate(ren_share = .data$cum_cap / .data$nameplate_capacity_mw * 100)
+
+    states_rengen_index <- states_rengen_2025 %>%
+      dplyr::ungroup() %>%
+      dplyr::select(.data$State, .data$cum_cap, .data$cap_index_22, .data$rengrowth_22_25, .data$ren_share) %>%
+      dplyr::mutate(dplyr::across(where(is.numeric), scale_minmax)) %>%
+      dplyr::mutate(capacity_index = rowmean_index(dplyr::select(., where(is.numeric))))
+
+    electric_capacity_growth <- states_rengen_index %>%
+      dplyr::transmute(state = .data$State, electric_capacity_growth = .data$capacity_index)
+
+    clean_electric_capacity_growth <- states_rengen_2025 %>%
+      dplyr::transmute(state = .data$State, clean_electric_capacity_growth = .data$rengrowth_22_25)
+  }
+}
+electric_capacity_growth <- ensure_optional_numeric(electric_capacity_growth, "electric_capacity_growth")
+clean_electric_capacity_growth <- ensure_optional_numeric(clean_electric_capacity_growth, "clean_electric_capacity_growth")
+
 # ---- CNBC Rankings -------------------------------------------------------
 cnbc_path <- fs::path(raw_dir, "cnbc_bus_rankings.csv")
 cnbc_raw <- read_optional_csv(cnbc_path)
@@ -516,7 +707,7 @@ if (!is.null(datacenter_raw)) {
       committed_mw = sum(`Committed Capacity (MW)`, na.rm = TRUE)
     ) %>%
     dplyr::left_join(states_gen, by = c("STATE" = "State")) %>%
-    dplyr::mutate(datacenter_share = headline_mw / `Nameplate Capacity (MW)`) %>%
+    dplyr::mutate(datacenter_share = headline_mw / .data$nameplate_capacity_mw) %>%
     dplyr::select(STATE, headline_mw, construction_mw, committed_mw, datacenter_share)
 
   datacenter_index <- datacenter_states %>%
@@ -626,8 +817,10 @@ raw_updates <- states %>%
   safe_left_join(cnbc_rank, by = "state") %>%
   safe_left_join(clean_investment, by = "state") %>%
   safe_left_join(datacenter_index, by = "state") %>%
+  safe_left_join(electric_capacity_growth, by = "state") %>%
   safe_left_join(semiconductor_investment, by = "state") %>%
-  safe_left_join(evs_per_capita, by = "state")
+  safe_left_join(evs_per_capita, by = "state") %>%
+  safe_left_join(clean_electric_capacity_growth, by = "state")
 
 # ---- Merge + Validate ----------------------------------------------------
 processed_inputs <- processed_inputs %>%
@@ -649,8 +842,10 @@ processed_inputs <- processed_inputs %>%
     cnbc_rank = dplyr::coalesce(`cnbc_rank.raw`, cnbc_rank),
     clean_tech_investment = dplyr::coalesce(`clean_tech_investment.raw`, clean_tech_investment),
     datacenter_index = dplyr::coalesce(`datacenter_index.raw`, datacenter_index),
+    electric_capacity_growth = dplyr::coalesce(`electric_capacity_growth.raw`, electric_capacity_growth),
     semiconductor_investment = dplyr::coalesce(`semiconductor_investment.raw`, semiconductor_investment),
-    evs_per_capita = dplyr::coalesce(`evs_per_capita.raw`, evs_per_capita)
+    evs_per_capita = dplyr::coalesce(`evs_per_capita.raw`, evs_per_capita),
+    clean_electric_capacity_growth = dplyr::coalesce(`clean_electric_capacity_growth.raw`, clean_electric_capacity_growth)
   ) %>%
   dplyr::select(-dplyr::ends_with(".raw"))
 
