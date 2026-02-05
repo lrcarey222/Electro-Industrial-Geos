@@ -3,7 +3,7 @@
 #' @param paths Paths list.
 #' @return Data frame of sample inputs.
 #' @export
-load_sample_inputs <- function(paths = getOption("Electro-Industrial.paths")) {
+load_sample_inputs <- function(paths = getOption("Electro_Industrial.paths")) {
   if (is.null(paths)) {
     rlang::abort("Paths not configured. Run scripts/00_setup.R first.")
   }

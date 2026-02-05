@@ -3,7 +3,7 @@
 #' @param root Repo root path.
 #' @return Invisible TRUE.
 #' @export
-run_Electro-Industrial_pipeline <- function(root = NULL) {
+run_Electro_Industrial_pipeline <- function(root = NULL) {
   if (is.null(root)) {
     root <- find_repo_root()
   }

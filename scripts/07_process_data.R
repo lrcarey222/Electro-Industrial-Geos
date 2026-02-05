@@ -1,5 +1,5 @@
-paths <- getOption("Electro-Industrial.paths")
-config <- getOption("Electro-Industrial.config")
+paths <- getOption("Electro_Industrial.paths")
+config <- getOption("Electro_Industrial.config")
 
 if (is.null(paths) || is.null(config)) {
   rlang::abort("Configuration not loaded. Run scripts/00_setup.R first.")
@@ -180,7 +180,7 @@ gjf <- read_optional_csv(gjf_path)
 incentives <- NULL
 if (!is.null(gjf) && nrow(state_gdp) > 0) {
   gjf <- gjf %>% janitor::clean_names()
-  gjf_Electro-Industrial <- gjf %>%
+  gjf_Electro_Industrial <- gjf %>%
     dplyr::filter(
       major_industry_of_parent %in% c(
         "miscellaneous energy products and systems",
@@ -197,11 +197,11 @@ if (!is.null(gjf) && nrow(state_gdp) > 0) {
       specific_industry_of_parent != "computers"
     )
 
-  Electro-Industrial_state_tot <- gjf_Electro-Industrial %>%
+  Electro_Industrial_state_tot <- gjf_Electro_Industrial %>%
     dplyr::group_by(location) %>%
     dplyr::summarize(subs_m = sum(subs_m, na.rm = TRUE), .groups = "drop")
 
-  incentives <- Electro-Industrial_state_tot %>%
+  incentives <- Electro_Industrial_state_tot %>%
     dplyr::left_join(state_gdp, by = c("location" = "GeoName")) %>%
     dplyr::mutate(incentives_gdp = ifelse(is.na(gdp_2024), NA_real_, subs_m / gdp_2024 * 100)) %>%
     dplyr::transmute(state = location, incentives_gdp)

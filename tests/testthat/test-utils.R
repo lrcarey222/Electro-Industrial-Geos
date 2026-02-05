@@ -7,7 +7,7 @@ source("R/utils/utils_index.R")
 source("R/utils/ingest_sample.R")
 source("R/categories/build_policy_intent.R")
 
-options(Electro-Industrial.paths = list(examples_dir = "tests/fixtures"))
+options(Electro_Industrial.paths = list(examples_dir = "tests/fixtures"))
 
 
 test_that("scale_minmax handles NA and Inf", {
