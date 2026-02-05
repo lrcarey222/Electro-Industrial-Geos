@@ -54,7 +54,7 @@ test_that("sub-index builders return expected columns", {
   expect_true(all(c("state", "abbr", "deployment_index") %in% names(deployment)))
 
   cluster <- build_cluster_index(inputs)
-  expect_true(all(c("state", "abbr", "cluster_index") %in% names(cluster)))
+  expect_true(all(c("state", "abbr", "dominant_anchor", "positive", "negative", "cluster_top", "cluster_index") %in% names(cluster)))
 })
 
 test_that("cluster index uses max anchor", {
@@ -76,6 +76,8 @@ test_that("cluster index uses max anchor", {
   out <- build_cluster_index(df)
 
   expect_true(out$cluster_index[1] >= out$cluster_index[2])
+  expect_true(out$dominant_anchor[1] == "semiconductor_manufacturing")
+  expect_true(out$cluster_top[1] != "")
 })
 
 test_that("Electro-Industrial weighted index matches fixture", {

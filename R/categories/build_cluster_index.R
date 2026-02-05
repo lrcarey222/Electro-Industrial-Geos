@@ -28,11 +28,18 @@ build_cluster_index <- function(inputs) {
 
   scaled %>%
     dplyr::rowwise() %>%
-    dplyr::mutate(max_anchor = max(dplyr::c_across(dplyr::all_of(anchor_vars)), na.rm = TRUE)) %>%
+    dplyr::mutate(
+      max_anchor = max(dplyr::c_across(dplyr::all_of(anchor_vars)), na.rm = TRUE),
+      dominant_anchor = anchor_vars[which.max(dplyr::c_across(dplyr::all_of(anchor_vars)))],
+      positive = rowMeans(dplyr::pick(dplyr::all_of(positive)), na.rm = TRUE),
+      negative = rowMeans(dplyr::pick(dplyr::all_of(negative)), na.rm = TRUE)
+    ) %>%
     dplyr::ungroup() %>%
     dplyr::mutate(
       base_sum = rowSums(dplyr::across(dplyr::all_of(base_cols)), na.rm = TRUE),
       cluster_index = (base_sum + max_anchor) / (base_n + 1),
-      cluster_index = scale_minmax(cluster_index)
-    )
+      cluster_index = scale_minmax(cluster_index),
+      cluster_top = dplyr::if_else(cluster_index > 0.5, state, "")
+    ) %>%
+    dplyr::arrange(dplyr::desc(cluster_index))
 }

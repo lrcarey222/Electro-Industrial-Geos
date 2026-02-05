@@ -523,6 +523,10 @@ generator_reference_date <- Sys.Date()
 candidate_start <- seq(generator_reference_date, length.out = 2, by = "-1 month")[2]
 
 op_gen_raw <- NULL
+elec_fac <- NULL
+datacenter_fac <- NULL
+semi_fac <- NULL
+drones_fac <- NULL
 generator_dates <- vapply(generator_files, parse_generator_date, numeric(1))
 latest_generator <- if (length(generator_dates) > 0 && any(!is.na(generator_dates))) {
   generator_files[which.max(generator_dates)]
@@ -598,6 +602,23 @@ if (!is.null(op_gen_raw)) {
           .data$technology == "Wood/Wood Waste Biomass" ~ "Biomass",
           TRUE ~ NA_character_
         )
+      )
+
+    elec_fac <- op_gen %>%
+      dplyr::filter(
+        .data$technology %in% c("Batteries", "Solar Photovoltaic"),
+        .data$operating_year > 2021,
+        .data$status == "(OP) Operating"
+      ) %>%
+      dplyr::transmute(
+        name = .data$entity_name,
+        size = .data$nameplate_capacity_mw,
+        cat = dplyr::if_else(.data$technology == "Batteries", "Electricity Storage", "Solar Generation"),
+        tech = .data$technology,
+        Latitude = .data$latitude,
+        Longitude = .data$longitude,
+        state_abbr = .data$plant_state,
+        unit = "MW"
       )
 
     states_gen <- op_gen %>%
@@ -681,6 +702,7 @@ cnbc_rank <- ensure_optional_numeric(cnbc_rank, "cnbc_rank")
 datacenter_path <- fs::path(raw_dir, "BNEF", "2025-08-08 - Global Data Center Live IT Capacity Database.xlsx")
 datacenter_raw <- read_optional_xlsx(datacenter_path, sheet = "Data Centers", start_row = 8)
 datacenter_index <- NULL
+datacenter_mw <- NULL
 if (!is.null(datacenter_raw)) {
   # Keep only rows with coordinates
   datacenter_points <- datacenter_raw %>%
@@ -694,6 +716,22 @@ if (!is.null(datacenter_raw)) {
     dplyr::filter(!STUSPS %in% c("PR", "VI", "GU", "MP", "AS")) %>%
     sf::st_transform(4326) %>% # match your points CRS
     dplyr::select(STATEFP, STUSPS, STATE = NAME) # keep only useful cols
+
+  datacenter_fac <- datacenter_points %>%
+    sf::st_join(states_sf, join = sf::st_within, left = TRUE) %>%
+    sf::st_drop_geometry() %>%
+    dplyr::filter(Date == "2025-03-31") %>%
+    dplyr::transmute(
+      name = .data$Company,
+      tech = paste(.data$`Facility Category`, "Datacenter"),
+      cat = "Datacenter",
+      size = .data$`Headline Capacity (MW)`,
+      Latitude = .data$Latitude,
+      Longitude = .data$Longitude,
+      state_abbr = .data$STUSPS,
+      unit = "MW"
+    ) %>%
+    dplyr::distinct()
 
   datacenter_states <- datacenter_points %>%
     sf::st_join(states_sf, join = sf::st_within, left = TRUE) %>%
@@ -720,8 +758,12 @@ if (!is.null(datacenter_raw)) {
     dplyr::ungroup() %>%
     dplyr::mutate(datacenter_index = rowMeans(dplyr::across(where(is.numeric)), na.rm = TRUE)) %>%
     dplyr::transmute(state = STATE, datacenter_index)
+
+  datacenter_mw <- datacenter_states %>%
+    dplyr::transmute(state = STATE, datacenter_mw = headline_mw)
 }
 datacenter_index <- ensure_optional_numeric(datacenter_index, "datacenter_index")
+datacenter_mw <- ensure_optional_numeric(datacenter_mw, "datacenter_mw")
 
 # ---- EV Registrations ----------------------------------------------------
 evs_path <- fs::path(raw_dir, "remote", "10962-ev-registration-counts-by-state_9-06-24.xlsx")
@@ -756,6 +798,19 @@ if (!is.null(semiconductor_raw) && !is.null(socioecon)) {
   semiconductor_raw <- semiconductor_raw %>% janitor::clean_names()
   project_col <- intersect(c("project_size", "project_size_text", "project_size_usd"), names(semiconductor_raw))[1]
   if (!is.na(project_col)) {
+    semi_fac <- semiconductor_raw %>%
+      dplyr::transmute(
+        name = .data$company,
+        cat = "Semiconductor Manufacturing",
+        tech = paste("Semiconductor", .data$category),
+        size = readr::parse_number(as.character(.data[[project_col]])) / 1000000,
+        Latitude = suppressWarnings(as.numeric(.data$lat)),
+        Longitude = suppressWarnings(as.numeric(.data$lon)),
+        state_abbr = .data$state,
+        unit = "USD"
+      )
+  }
+  if (!is.na(project_col)) {
     semiconductor_investment <- semiconductor_raw %>%
       dplyr::mutate(project_size_usd = readr::parse_number(.data[[project_col]])) %>%
       dplyr::group_by(.data$state) %>%
@@ -767,6 +822,231 @@ if (!is.null(semiconductor_raw) && !is.null(socioecon)) {
   }
 }
 semiconductor_investment <- ensure_optional_numeric(semiconductor_investment, "semiconductor_investment")
+
+
+# ---- Cluster Inputs (legacy cluster section wiring) ---------------------
+semiconductor_manufacturing <- NULL
+if (!is.null(semiconductor_raw)) {
+  semiconductor_raw <- semiconductor_raw %>% janitor::clean_names()
+  state_col <- intersect(c("state", "state_code"), names(semiconductor_raw))[1]
+  project_col <- intersect(c("project_size", "project_size_text", "project_size_usd"), names(semiconductor_raw))[1]
+  if (!is.na(state_col) && !is.na(project_col)) {
+    semiconductor_manufacturing <- semiconductor_raw %>%
+      dplyr::mutate(
+        state_abbr = stringr::str_trim(as.character(.data[[state_col]])),
+        semiconductor_manufacturing = readr::parse_number(as.character(.data[[project_col]])) / 1000000
+      ) %>%
+      dplyr::group_by(.data$state_abbr) %>%
+      dplyr::summarize(semiconductor_manufacturing = sum(.data$semiconductor_manufacturing, na.rm = TRUE), .groups = "drop") %>%
+      dplyr::left_join(states, by = c("state_abbr" = "abbr")) %>%
+      dplyr::transmute(state = .data$state, semiconductor_manufacturing)
+  }
+}
+semiconductor_manufacturing <- ensure_optional_numeric(semiconductor_manufacturing, "semiconductor_manufacturing")
+
+cluster_manufacturing <- NULL
+quarterly_path <- fs::path(raw_dir, "clean_investment_monitor_q2_2025", "quarterly_actual_investment.csv")
+quarterly_actual <- read_optional_csv_skip(quarterly_path, skip = 5)
+if (!is.null(quarterly_actual)) {
+  quarterly_actual <- quarterly_actual %>% janitor::clean_names()
+  required_quarterly <- c("segment", "state", "technology", "estimated_actual_quarterly_expenditure")
+  if (all(required_quarterly %in% names(quarterly_actual))) {
+    cluster_manufacturing <- quarterly_actual %>%
+      dplyr::filter(
+        .data$segment == "Manufacturing",
+        .data$technology %in% c("Batteries", "Solar", "Zero Emission Vehicles")
+      ) %>%
+      dplyr::mutate(
+        technology = dplyr::case_when(
+          .data$technology == "Batteries" ~ "battery_manufacturing",
+          .data$technology == "Solar" ~ "solar_manufacturing",
+          .data$technology == "Zero Emission Vehicles" ~ "ev_manufacturing",
+          TRUE ~ NA_character_
+        ),
+        value = readr::parse_number(as.character(.data$estimated_actual_quarterly_expenditure))
+      ) %>%
+      dplyr::group_by(.data$state, .data$technology) %>%
+      dplyr::summarize(value = sum(.data$value, na.rm = TRUE), .groups = "drop") %>%
+      tidyr::pivot_wider(names_from = .data$technology, values_from = .data$value, values_fill = 0) %>%
+      dplyr::left_join(states, by = c("state" = "abbr")) %>%
+      dplyr::transmute(
+        state = dplyr::coalesce(.data$state.y, .data$state.x),
+        battery_manufacturing = .data$battery_manufacturing,
+        solar_manufacturing = .data$solar_manufacturing,
+        ev_manufacturing = .data$ev_manufacturing
+      )
+  }
+}
+if (is.null(cluster_manufacturing)) {
+  cluster_manufacturing <- tibble::tibble(
+    state = character(),
+    battery_manufacturing = numeric(),
+    solar_manufacturing = numeric(),
+    ev_manufacturing = numeric()
+  )
+}
+
+industrial_electricity_price <- NULL
+industrial_price_path <- fs::path(raw_dir, "table_8.xlsx")
+industrial_price_raw <- read_optional_xlsx(industrial_price_path, sheet = 1, start_row = 3)
+if (!is.null(industrial_price_raw)) {
+  industrial_price_raw <- industrial_price_raw %>% janitor::clean_names()
+  state_col <- intersect(c("state", "state_name"), names(industrial_price_raw))[1]
+  price_col <- intersect(c("average_price_cents_kwh", "average_price_cents_per_kwh", "average_price"), names(industrial_price_raw))[1]
+  if (!is.na(state_col) && !is.na(price_col)) {
+    industrial_electricity_price <- industrial_price_raw %>%
+      dplyr::transmute(
+        state_raw = stringr::str_trim(as.character(.data[[state_col]])),
+        industrial_electricity_price = readr::parse_number(as.character(.data[[price_col]]))
+      ) %>%
+      dplyr::mutate(
+        state = dplyr::case_when(
+          nchar(.data$state_raw) == 2 ~ states$state[match(.data$state_raw, states$abbr)],
+          TRUE ~ .data$state_raw
+        )
+      ) %>%
+      dplyr::filter(!is.na(.data$state)) %>%
+      dplyr::group_by(.data$state) %>%
+      dplyr::summarize(industrial_electricity_price = mean(.data$industrial_electricity_price, na.rm = TRUE), .groups = "drop")
+  }
+}
+industrial_electricity_price <- ensure_optional_numeric(industrial_electricity_price, "industrial_electricity_price")
+
+
+# ---- Electrotech facilities chart wiring ---------------------------------
+median_scurve <- function(x, gamma = 0.5) {
+  r <- dplyr::percent_rank(x)
+  (r^gamma) / (r^gamma + (1 - r)^gamma)
+}
+
+if (is.null(elec_fac)) {
+  elec_fac <- tibble::tibble(name = character(), tech = character(), cat = character(), size = numeric(), Latitude = numeric(), Longitude = numeric(), state_abbr = character(), unit = character())
+}
+if (is.null(datacenter_fac)) {
+  datacenter_fac <- tibble::tibble(name = character(), tech = character(), cat = character(), size = numeric(), Latitude = numeric(), Longitude = numeric(), state_abbr = character(), unit = character())
+}
+if (is.null(semi_fac)) {
+  semi_fac <- tibble::tibble(name = character(), tech = character(), cat = character(), size = numeric(), Latitude = numeric(), Longitude = numeric(), state_abbr = character(), unit = character())
+}
+
+drones_path <- fs::path(raw_dir, "us_drone_facility_announcements_2022_2025.csv")
+if (!fs::file_exists(drones_path)) {
+  drones_path <- fs::path(raw_dir, "Downloads", "us_drone_facility_announcements_2022_2025.csv")
+}
+drones_raw <- read_optional_csv(drones_path)
+if (!is.null(drones_raw)) {
+  drones_raw <- drones_raw %>% janitor::clean_names()
+  drones_fac <- drones_raw %>%
+    dplyr::transmute(
+      name = .data$company,
+      cat = "Drone Manufacturing",
+      tech = .data$facility_project,
+      size = readr::parse_number(as.character(.data$investment_usd_millions)),
+      Latitude = readr::parse_number(as.character(.data$latitude)),
+      Longitude = readr::parse_number(as.character(.data$longitude)),
+      state_abbr = .data$state,
+      unit = "USD"
+    )
+}
+if (is.null(drones_fac)) {
+  drones_fac <- tibble::tibble(name = character(), tech = character(), cat = character(), size = numeric(), Latitude = numeric(), Longitude = numeric(), state_abbr = character(), unit = character())
+}
+
+electrotech_fac <- dplyr::bind_rows(datacenter_fac, semi_fac, elec_fac, drones_fac) %>%
+  dplyr::filter(!is.na(.data$cat), !is.na(.data$size)) %>%
+  dplyr::group_by(.data$cat) %>%
+  dplyr::mutate(
+    size_perc = scale_minmax(.data$size),
+    size_perc_scurve = median_scurve(.data$size)
+  ) %>%
+  dplyr::ungroup() %>%
+  dplyr::mutate(size = dplyr::if_else(.data$unit == "MW", .data$size * 0.66, .data$size))
+
+if (nrow(electrotech_fac) > 0) {
+  readr::write_csv(electrotech_fac, fs::path(paths$processed_dir, "electrotech_fac.csv"))
+
+  state_electro <- electrotech_fac %>%
+    dplyr::filter(!is.na(.data$state_abbr)) %>%
+    dplyr::group_by(.data$state_abbr, .data$cat, .data$unit) %>%
+    dplyr::summarize(size = sum(.data$size, na.rm = TRUE), .groups = "drop") %>%
+    tidyr::pivot_wider(names_from = .data$cat, values_from = .data$size)
+
+  readr::write_csv(state_electro, fs::path(paths$processed_dir, "state_electro.csv"))
+}
+
+# ---- County employment (legacy wiring, state-level rollup) --------------
+workforce_share_update <- NULL
+workforce_growth_update <- NULL
+if (requireNamespace("blsQCEW", quietly = TRUE) && requireNamespace("tidycensus", quietly = TRUE)) {
+  electric_man_6d <- c(
+    "513322", "513340", "513390", "515210", "517210", "517211", "517212", "517410", "517910", "517919",
+    "334210", "334220", "334290", "335912", "221112", "221111", "221113", "221114", "221115", "221116", "221117", "221118", "221119", "221121",
+    "335110", "335121", "335122", "335129", "335311", "335312", "335313", "335314", "335921", "335929", "335931", "335932", "335991", "335999", "335911"
+  )
+  electric_man_4d <- unique(stringr::str_sub(electric_man_6d, 1, 4))
+
+  county_codes <- tidycensus::fips_codes %>%
+    dplyr::transmute(area_code = paste0(.data$state_code, .data$county_code), state_abbr = .data$state) %>%
+    dplyr::distinct()
+
+  fetch_county_qtr <- purrr::possibly(
+    function(area_code, y, q) blsQCEW::blsQCEW("Area", year = y, quarter = q, area = area_code),
+    otherwise = NULL
+  )
+
+  pull_qtr <- function(y, q) {
+    purrr::map_dfr(county_codes$area_code, function(ac) {
+      df <- fetch_county_qtr(ac, y, q)
+      if (is.null(df) || nrow(df) == 0) {
+        return(tibble::tibble())
+      }
+      df %>% dplyr::mutate(area_code = ac)
+    })
+  }
+
+  all_latest <- tryCatch(pull_qtr("2025", "2"), error = function(e) tibble::tibble())
+  all_2022q1 <- tryCatch(pull_qtr("2022", "1"), error = function(e) tibble::tibble())
+
+  if (nrow(all_latest) > 0) {
+    county_elec_latest <- all_latest %>%
+      dplyr::filter(.data$own_code == 5, nchar(.data$industry_code) == 4, .data$industry_code %in% electric_man_4d) %>%
+      dplyr::mutate(latest_month_emplvl = dplyr::coalesce(.data$month3_emplvl, .data$month2_emplvl, .data$month1_emplvl)) %>%
+      dplyr::left_join(county_codes, by = "area_code") %>%
+      dplyr::group_by(.data$state_abbr) %>%
+      dplyr::summarize(elec_emp = sum(.data$latest_month_emplvl, na.rm = TRUE), .groups = "drop")
+
+    state_all_latest <- all_latest %>%
+      dplyr::filter(.data$own_code == 5, .data$industry_code == "10") %>%
+      dplyr::mutate(latest_month_emplvl = dplyr::coalesce(.data$month3_emplvl, .data$month2_emplvl, .data$month1_emplvl)) %>%
+      dplyr::left_join(county_codes, by = "area_code") %>%
+      dplyr::group_by(.data$state_abbr) %>%
+      dplyr::summarize(total_emp = sum(.data$latest_month_emplvl, na.rm = TRUE), .groups = "drop")
+
+    workforce_share_update <- county_elec_latest %>%
+      dplyr::left_join(state_all_latest, by = "state_abbr") %>%
+      dplyr::mutate(workforce_share = dplyr::if_else(.data$total_emp > 0, .data$elec_emp / .data$total_emp * 100, NA_real_)) %>%
+      dplyr::left_join(states, by = c("state_abbr" = "abbr")) %>%
+      dplyr::transmute(state = .data$state, workforce_share)
+
+    if (nrow(all_2022q1) > 0) {
+      county_elec_2022 <- all_2022q1 %>%
+        dplyr::filter(.data$own_code == 5, nchar(.data$industry_code) == 4, .data$industry_code %in% electric_man_4d) %>%
+        dplyr::mutate(latest_month_emplvl = dplyr::coalesce(.data$month3_emplvl, .data$month2_emplvl, .data$month1_emplvl)) %>%
+        dplyr::left_join(county_codes, by = "area_code") %>%
+        dplyr::group_by(.data$state_abbr) %>%
+        dplyr::summarize(elec_emp_2022 = sum(.data$latest_month_emplvl, na.rm = TRUE), .groups = "drop")
+
+      workforce_growth_update <- county_elec_latest %>%
+        dplyr::left_join(county_elec_2022, by = "state_abbr") %>%
+        dplyr::left_join(state_all_latest, by = "state_abbr") %>%
+        dplyr::mutate(workforce_growth = dplyr::if_else(.data$total_emp > 0, (.data$elec_emp - .data$elec_emp_2022) / .data$total_emp, NA_real_)) %>%
+        dplyr::left_join(states, by = c("state_abbr" = "abbr")) %>%
+        dplyr::transmute(state = .data$state, workforce_growth)
+    }
+  }
+}
+workforce_share_update <- ensure_optional_numeric(workforce_share_update, "workforce_share")
+workforce_growth_update <- ensure_optional_numeric(workforce_growth_update, "workforce_growth")
 
 spot_path <- fs::path(raw_dir, "50 State Gap Analysis.xlsx")
 spot <- tibble::tibble(state = character(), spot_score = numeric())
@@ -819,7 +1099,13 @@ raw_updates <- states %>%
   safe_left_join(electric_capacity_growth, by = "state") %>%
   safe_left_join(semiconductor_investment, by = "state") %>%
   safe_left_join(evs_per_capita, by = "state") %>%
-  safe_left_join(clean_electric_capacity_growth, by = "state")
+  safe_left_join(clean_electric_capacity_growth, by = "state") %>%
+  safe_left_join(datacenter_mw, by = "state") %>%
+  safe_left_join(semiconductor_manufacturing, by = "state") %>%
+  safe_left_join(cluster_manufacturing, by = "state") %>%
+  safe_left_join(industrial_electricity_price, by = "state") %>%
+  safe_left_join(workforce_share_update, by = "state") %>%
+  safe_left_join(workforce_growth_update, by = "state")
 
 # ---- Merge + Validate ----------------------------------------------------
 processed_inputs <- processed_inputs %>%
@@ -844,7 +1130,15 @@ processed_inputs <- processed_inputs %>%
     electric_capacity_growth = dplyr::coalesce(`electric_capacity_growth.raw`, electric_capacity_growth),
     semiconductor_investment = dplyr::coalesce(`semiconductor_investment.raw`, semiconductor_investment),
     evs_per_capita = dplyr::coalesce(`evs_per_capita.raw`, evs_per_capita),
-    clean_electric_capacity_growth = dplyr::coalesce(`clean_electric_capacity_growth.raw`, clean_electric_capacity_growth)
+    clean_electric_capacity_growth = dplyr::coalesce(`clean_electric_capacity_growth.raw`, clean_electric_capacity_growth),
+    datacenter_mw = dplyr::coalesce(`datacenter_mw.raw`, datacenter_mw),
+    semiconductor_manufacturing = dplyr::coalesce(`semiconductor_manufacturing.raw`, semiconductor_manufacturing),
+    battery_manufacturing = dplyr::coalesce(`battery_manufacturing.raw`, battery_manufacturing),
+    solar_manufacturing = dplyr::coalesce(`solar_manufacturing.raw`, solar_manufacturing),
+    ev_manufacturing = dplyr::coalesce(`ev_manufacturing.raw`, ev_manufacturing),
+    industrial_electricity_price = dplyr::coalesce(`industrial_electricity_price.raw`, industrial_electricity_price),
+    workforce_share = dplyr::coalesce(`workforce_share.raw`, workforce_share),
+    workforce_growth = dplyr::coalesce(`workforce_growth.raw`, workforce_growth)
   ) %>%
   dplyr::select(-dplyr::ends_with(".raw"))
 
