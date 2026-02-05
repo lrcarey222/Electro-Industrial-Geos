@@ -630,7 +630,7 @@ if (!is.null(op_gen_raw)) {
       dplyr::group_by(.data$Division, .data$State) %>%
       dplyr::mutate(
         cum_cap = cumsum(.data$nameplate_capacity_mw),
-        base_cap = .data$cum_cap[.data$Year == "2022-01-01"],
+        base_cap = dplyr::first(.data$cum_cap[.data$operating_year == 2022], default = NA_real_),
         cap_index_22 = dplyr::if_else(.data$base_cap > 0, 100 * .data$cum_cap / .data$base_cap, NA_real_),
         rengrowth_22_25 = .data$cum_cap - .data$base_cap
       ) %>%
