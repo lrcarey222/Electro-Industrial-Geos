@@ -29,11 +29,8 @@ ingest_legacy_sources <- function(paths, snapshot_date, skip_downloads = FALSE) 
     "table_8.xlsx"
   )
 
-  snapshot_date_parsed <- suppressWarnings(as.Date(snapshot_date))
-  if (is.na(snapshot_date_parsed)) {
-    snapshot_date_parsed <- Sys.Date()
-  }
-  generator_date <- seq(snapshot_date_parsed, length.out = 2, by = "-1 month")[2]
+  generator_reference_date <- Sys.Date()
+  generator_date <- seq(generator_reference_date, length.out = 2, by = "-1 month")[2]
   make_generator_source <- function(date) {
     filename <- paste0(
       tolower(format(date, "%B")),

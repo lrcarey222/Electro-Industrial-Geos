@@ -519,12 +519,8 @@ is_valid_xlsx <- function(path) {
   identical(sig, charToRaw("PK"))
 }
 
-snapshot_date_raw <- paths$snapshot_date %||% ""
-snapshot_date_parsed <- suppressWarnings(as.Date(snapshot_date_raw))
-if (is.na(snapshot_date_parsed) || identical(snapshot_date_raw, "2025-01-01")) {
-  snapshot_date_parsed <- Sys.Date()
-}
-candidate_start <- seq(snapshot_date_parsed, length.out = 2, by = "-1 month")[2]
+generator_reference_date <- Sys.Date()
+candidate_start <- seq(generator_reference_date, length.out = 2, by = "-1 month")[2]
 
 op_gen_raw <- NULL
 generator_dates <- vapply(generator_files, parse_generator_date, numeric(1))
