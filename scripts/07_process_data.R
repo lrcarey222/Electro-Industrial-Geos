@@ -509,8 +509,19 @@ make_generator_source <- function(date) {
   )
 }
 
-snapshot_date_parsed <- suppressWarnings(as.Date(paths$snapshot_date))
-if (is.na(snapshot_date_parsed)) {
+is_valid_xlsx <- function(path) {
+  if (!fs::file_exists(path) || fs::file_size(path) <= 0) {
+    return(FALSE)
+  }
+  con <- file(path, "rb")
+  on.exit(close(con), add = TRUE)
+  sig <- readBin(con, what = "raw", n = 2)
+  identical(sig, charToRaw("PK"))
+}
+
+snapshot_date_raw <- paths$snapshot_date %||% ""
+snapshot_date_parsed <- suppressWarnings(as.Date(snapshot_date_raw))
+if (is.na(snapshot_date_parsed) || identical(snapshot_date_raw, "2025-01-01")) {
   snapshot_date_parsed <- Sys.Date()
 }
 candidate_start <- seq(snapshot_date_parsed, length.out = 2, by = "-1 month")[2]
@@ -524,11 +535,13 @@ latest_generator <- if (length(generator_dates) > 0 && any(!is.na(generator_date
 }
 
 if (!is.na(latest_generator)) {
-  op_gen_raw <- read_optional_xlsx(latest_generator, sheet = 1, start_row = 3)
+  if (is_valid_xlsx(latest_generator)) {
+    op_gen_raw <- suppressWarnings(read_optional_xlsx(latest_generator, sheet = 1, start_row = 3))
+  }
 }
 
 if (is.null(op_gen_raw)) {
-  for (months_back in 0:24) {
+  for (months_back in 0:1) {
     candidate_date <- seq(candidate_start, length.out = months_back + 1, by = "-1 month")[months_back + 1]
     candidate_src <- make_generator_source(candidate_date)
 
@@ -542,13 +555,13 @@ if (is.null(op_gen_raw)) {
         ),
         error = function(e) NULL
       )
-      if (!is.null(candidate_cached) && fs::file_exists(candidate_cached) && fs::file_size(candidate_cached) > 0) {
+      if (!is.null(candidate_cached) && is_valid_xlsx(candidate_cached)) {
         fs::file_copy(candidate_cached, candidate_src$path, overwrite = TRUE)
       }
     }
 
-    if (fs::file_exists(candidate_src$path)) {
-      candidate_raw <- read_optional_xlsx(candidate_src$path, sheet = 1, start_row = 3)
+    if (is_valid_xlsx(candidate_src$path)) {
+      candidate_raw <- suppressWarnings(read_optional_xlsx(candidate_src$path, sheet = 1, start_row = 3))
       if (!is.null(candidate_raw)) {
         op_gen_raw <- candidate_raw
         break
