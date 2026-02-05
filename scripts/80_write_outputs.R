@@ -1,5 +1,5 @@
-paths <- getOption("electrotech.paths")
-index_definition <- getOption("electrotech.index_definition")
+paths <- getOption("Electro_Industrial.paths")
+index_definition <- getOption("Electro_Industrial.index_definition")
 
 outputs <- list(
   policy = policy_intent,
@@ -8,7 +8,7 @@ outputs <- list(
   infrastructure = infrastructure,
   deployment = deployment,
   cluster = cluster,
-  electrotech = electrotech
+  `Electro-Industrial` = Electro_Industrial
 )
 
 export_outputs(

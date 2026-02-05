@@ -1,6 +1,6 @@
 # Data Inventory
 
-This repository separates **public** data sources (downloadable) from **proprietary** or internal datasets. The pipeline expects a single `inputs.csv` in `data/` unless `ELECTROTECH_USE_SAMPLE_DATA=true`.
+This repository separates **public** data sources (downloadable) from **proprietary** or internal datasets. The pipeline expects a single `inputs.csv` in `data/` unless `Electro-Industrial_USE_SAMPLE_DATA=true`.
 
 ## Required inputs (`data/inputs.csv`)
 
@@ -19,7 +19,7 @@ The full pipeline expects the following columns:
 | regdata_index | Regulatory restrictions index | RegData | Public |
 | ordinance | Solar ordinance count | Internal compilation | Proprietary |
 | sepa | SEPA presence | Internal compilation | Proprietary |
-| employment_lq | Electrotech employment LQ | BLS QCEW | Public (API) |
+| employment_lq | Electro-Industrial employment LQ | BLS QCEW | Public (API) |
 | gdp_growth_index | Manufacturing GDP growth index | BEA GDP | Public |
 | feasibility_index | Feasibility index | Internal model | Proprietary |
 | economic_dynamism | Economic dynamism score | EIG Dynamism | Public |
@@ -33,8 +33,8 @@ The full pipeline expects the following columns:
 | electric_capacity_growth | Clean electric capacity growth | EIA | Public |
 | semiconductor_investment | Semiconductor investment per GDP | SIA | Proprietary |
 | evs_per_capita | EV registrations per capita | AFDC | Public |
-| workforce_share | Electrotech workforce share | BLS QCEW | Public |
-| workforce_growth | Electrotech workforce growth | BLS QCEW | Public |
+| workforce_share | Electro-Industrial workforce share | BLS QCEW | Public |
+| workforce_growth | Electro-Industrial workforce growth | BLS QCEW | Public |
 | industry_feasibility | Industry feasibility | Internal model | Proprietary |
 | clean_electric_capacity_growth | Clean electric capacity growth | EIA | Public |
 | industrial_electricity_price | Industrial electricity price | EIA | Public |
@@ -54,4 +54,4 @@ Downloaded public data should be cached under `data/raw_cache/` using `download_
 
 ## Raw source staging
 
-The ingestion stage (`scripts/05_ingest_sources.R`) treats legacy hard-coded file paths in `Legacy Script/Electrotech_State.R` as if they live under `data/raw/`. Place those files (or folders) in `data/raw/` matching the same relative paths (for example, `data/raw/Good Jobs First/gjf_complete.csv`). URL-based files referenced in the legacy script are downloaded into `data/raw/remote/` during ingestion unless `SKIP_DATA_DOWNLOADS=true`.
+The ingestion stage (`scripts/05_ingest_sources.R`) treats legacy hard-coded file paths in `Legacy Script/Electro-Industrial_State.R` as if they live under `data/raw/`. Place those files (or folders) in `data/raw/` matching the same relative paths (for example, `data/raw/Good Jobs First/gjf_complete.csv`). URL-based files referenced in the legacy script are downloaded into `data/raw/remote/` during ingestion unless `SKIP_DATA_DOWNLOADS=true`.
