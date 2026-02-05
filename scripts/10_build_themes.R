@@ -12,6 +12,9 @@ if (exists("validated_inputs", inherits = TRUE)) {
   processed_inputs <- readr::read_csv(processed_path, show_col_types = FALSE)
 }
 
+processed_inputs <- processed_inputs %>%
+  dplyr::mutate(dplyr::across(where(is.numeric), ~ tidyr::replace_na(.x, 0)))
+
 policy_intent <- build_policy_intent_index(
   dplyr::select(
     processed_inputs,
