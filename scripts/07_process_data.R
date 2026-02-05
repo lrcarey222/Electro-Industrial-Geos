@@ -473,6 +473,7 @@ electricity_price <- ensure_optional_numeric(electricity_price, "electricity_pri
 
 # ---- Electricity Capacity -----------------------------------------------
 generator_dir <- fs::path(raw_dir, "remote")
+fs::dir_create(generator_dir, recurse = TRUE)
 generator_files <- fs::dir_ls(
   generator_dir,
   regexp = "^[A-Za-z]+_generator\\d{4}\\.xlsx$",
@@ -481,25 +482,81 @@ generator_files <- fs::dir_ls(
 )
 generator_months <- setNames(tolower(month.name), tolower(month.name))
 parse_generator_date <- function(path) {
-  basename <- basename(path)
-  match <- stringr::str_match(basename, "^([A-Za-z]+)_generator(\\d{4})\\.xlsx$")
-  if (is.na(match[1, 1])) {
+  filename <- basename(path)
+  match_info <- stringr::str_match(filename, "^([A-Za-z]+)_generator(\\d{4})\\.xlsx$")
+  if (is.na(match_info[1, 1])) {
     return(NA_real_)
   }
-  month_key <- tolower(match[1, 2])
+  month_key <- tolower(match_info[1, 2])
   if (!month_key %in% names(generator_months)) {
     return(NA_real_)
   }
-  month_num <- match(month_key, generator_months)
-  as.numeric(sprintf("%04d%02d", as.integer(match[1, 3]), month_num))
+  month_num <- base::match(month_key, generator_months)
+  as.numeric(sprintf("%04d%02d", as.integer(match_info[1, 3]), month_num))
 }
+
+make_generator_source <- function(date) {
+  filename <- paste0(
+    tolower(format(date, "%B")),
+    "_generator",
+    format(date, "%Y"),
+    ".xlsx"
+  )
+  list(
+    filename = filename,
+    url = paste0("https://www.eia.gov/electricity/data/eia860m/xls/", filename),
+    path = fs::path(generator_dir, filename)
+  )
+}
+
+snapshot_date_parsed <- suppressWarnings(as.Date(paths$snapshot_date))
+if (is.na(snapshot_date_parsed)) {
+  snapshot_date_parsed <- Sys.Date()
+}
+candidate_start <- seq(snapshot_date_parsed, length.out = 2, by = "-1 month")[2]
+
+op_gen_raw <- NULL
 generator_dates <- vapply(generator_files, parse_generator_date, numeric(1))
 latest_generator <- if (length(generator_dates) > 0 && any(!is.na(generator_dates))) {
   generator_files[which.max(generator_dates)]
 } else {
-  fs::path(generator_dir, "july_generator2025.xlsx")
+  NA_character_
 }
-op_gen_raw <- read_optional_xlsx(latest_generator, sheet = 1, start_row = 3)
+
+if (!is.na(latest_generator)) {
+  op_gen_raw <- read_optional_xlsx(latest_generator, sheet = 1, start_row = 3)
+}
+
+if (is.null(op_gen_raw)) {
+  for (months_back in 0:24) {
+    candidate_date <- seq(candidate_start, length.out = months_back + 1, by = "-1 month")[months_back + 1]
+    candidate_src <- make_generator_source(candidate_date)
+
+    if (!fs::file_exists(candidate_src$path)) {
+      candidate_cached <- tryCatch(
+        download_with_cache(
+          url = candidate_src$url,
+          dest_dir = paths$cache_dir,
+          snapshot_date = paths$snapshot_date,
+          filename = candidate_src$filename
+        ),
+        error = function(e) NULL
+      )
+      if (!is.null(candidate_cached) && fs::file_exists(candidate_cached) && fs::file_size(candidate_cached) > 0) {
+        fs::file_copy(candidate_cached, candidate_src$path, overwrite = TRUE)
+      }
+    }
+
+    if (fs::file_exists(candidate_src$path)) {
+      candidate_raw <- read_optional_xlsx(candidate_src$path, sheet = 1, start_row = 3)
+      if (!is.null(candidate_raw)) {
+        op_gen_raw <- candidate_raw
+        break
+      }
+    }
+  }
+}
+
 states_gen <- tibble::tibble(State = character(), nameplate_capacity_mw = numeric())
 electric_capacity_growth <- NULL
 clean_electric_capacity_growth <- NULL
