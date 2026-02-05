@@ -11,12 +11,12 @@ source("R/categories/build_economic_capabilities.R")
 source("R/categories/build_infrastructure.R")
 source("R/categories/build_deployment.R")
 source("R/categories/build_cluster_index.R")
-source("R/indices/build_electrotech_index.R")
+source("R/indices/build_Electro-Industrial_index.R")
 
 options(
-  electrotech.paths = list(examples_dir = "tests/fixtures"),
-  electrotech.weights = list(
-    electrotech = list(
+  Electro_Industrial.paths = list(examples_dir = "tests/fixtures"),
+  Electro_Industrial.weights = list(
+    `Electro-Industrial` = list(
       deployment_index = 0.4,
       infra_index = 0.15,
       econ_index = 0.15,
@@ -78,7 +78,7 @@ test_that("cluster index uses max anchor", {
   expect_true(out$cluster_index[1] >= out$cluster_index[2])
 })
 
-test_that("electrotech weighted index matches fixture", {
+test_that("Electro-Industrial weighted index matches fixture", {
   inputs <- load_sample_inputs()
 
   policy <- build_policy_intent_index(inputs)
@@ -88,9 +88,9 @@ test_that("electrotech weighted index matches fixture", {
   deployment <- build_deployment_index(inputs)
   cluster <- build_cluster_index(inputs)
 
-  electrotech <- build_electrotech_index(deployment, infra, economic, policy, regulatory, cluster)
+  Electro_Industrial <- build_Electro_Industrial_index(deployment, infra, economic, policy, regulatory, cluster)
 
-  expected <- readr::read_csv("tests/fixtures/expected_electrotech.csv", show_col_types = FALSE)
+  expected <- readr::read_csv("tests/fixtures/expected_Electro-Industrial.csv", show_col_types = FALSE)
 
-  expect_equal(electrotech$electrotech_index_w, expected$electrotech_index_w, tolerance = 1e-8)
+  expect_equal(Electro_Industrial$Electro_Industrial_index_w, expected$Electro_Industrial_index_w, tolerance = 1e-8)
 })

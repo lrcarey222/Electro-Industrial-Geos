@@ -35,7 +35,7 @@ validate_inputs_schema <- function(inputs, required_cols) {
   inputs
 }
 
-#' Required input columns for Electrotech index
+#' Required input columns for Electro-Industrial index
 #'
 #' @return Character vector of required columns.
 #' @export
