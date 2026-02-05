@@ -1,4 +1,4 @@
-name: electrotech-ci
+name: Electro-Industrial-ci
 
 on:
   push:
@@ -8,7 +8,7 @@ jobs:
   pipeline-check:
     runs-on: ubuntu-latest
     env:
-      ELECTROTECH_USE_SAMPLE_DATA: "true"
+      Electro-Industrial_USE_SAMPLE_DATA: "true"
       SKIP_DATA_DOWNLOADS: "true"
     steps:
       - uses: actions/checkout@v4

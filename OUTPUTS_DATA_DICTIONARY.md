@@ -1,6 +1,6 @@
 # Output Data Dictionary
 
-## outputs/electrotech.csv
+## outputs/Electro-Industrial.csv
 
 | Column | Description |
 | --- | --- |
@@ -12,8 +12,8 @@
 | intent_index | Policy intent sub-index (0-1) |
 | ease_index | Regulatory ease sub-index (0-1) |
 | cluster_index | Cluster sub-index (0-1) |
-| electrotech_index | Unweighted sum of scaled sub-indexes |
-| electrotech_index_w | Weighted Electrotech Index |
+| Electro-Industrial_index | Unweighted sum of scaled sub-indexes |
+| Electro-Industrial_index_w | Weighted Electro-Industrial Index |
 
 ## outputs/deployment.csv
 
@@ -58,6 +58,6 @@
 | ev_manufacturing | EV manufacturing |
 | cluster_index | Cluster sub-index (0-1) |
 
-## outputs/Electrotech_Index_Tables.xlsx
+## outputs/Electro-Industrial_Index_Tables.xlsx
 
-Contains one sheet per sub-index and a combined Electrotech sheet with the same columns as the CSV outputs above.
+Contains one sheet per sub-index and a combined Electro-Industrial sheet with the same columns as the CSV outputs above.

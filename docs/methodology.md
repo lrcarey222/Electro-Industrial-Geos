@@ -1,6 +1,6 @@
-# Electrotech Index Methodology
+# Electro-Industrial Index Methodology
 
-This repository implements the Electrotech Index as specified in `Legacy Script/Electrotech_State.R`. The refactor keeps the index logic identical while organizing the pipeline and configs in an OSI-style structure.
+This repository implements the Electro-Industrial Index as specified in `Legacy Script/Electro-Industrial_State.R`. The refactor keeps the index logic identical while organizing the pipeline and configs in an OSI-style structure.
 
 ## Sub-index definitions
 
@@ -10,7 +10,7 @@ Inputs (higher is better):
 - SPOT policy score
 - DSIRE policy count
 - Economic development policy count
-- Electrotech legislation index
+- Electro-Industrial legislation index
 
 Each indicator is min-max scaled to [0, 1] and averaged to compute `intent_index`.
 
@@ -25,7 +25,7 @@ Each indicator is reverse min-max scaled and averaged to compute `ease_index`.
 
 ### Economic Capabilities
 Inputs (higher is better):
-- Electrotech employment specialization (LQ)
+- Electro-Industrial employment specialization (LQ)
 - Manufacturing GDP growth index
 - Feasibility index
 - Economic dynamism score
@@ -63,9 +63,9 @@ Inputs (higher is better unless noted):
 
 Indicators are scaled by polarity. The cluster index is computed as the mean of non-anchor inputs plus the maximum anchor metric, then rescaled to [0, 1] for comparability.
 
-## Electrotech Index
+## Electro-Industrial Index
 
-The combined Electrotech Index uses the following weights (from the legacy script):
+The combined Electro-Industrial Index uses the following weights (from the legacy script):
 
 - Deployment: 0.4
 - Infrastructure: 0.15

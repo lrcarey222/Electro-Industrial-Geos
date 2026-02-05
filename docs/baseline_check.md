@@ -12,11 +12,11 @@ The baseline pipeline could not be executed because `Rscript` is not available i
 
 | Output file | Checksum (sha256) |
 | --- | --- |
-| outputs/electrotech.csv | N/A (pipeline not run) |
+| outputs/Electro-Industrial.csv | N/A (pipeline not run) |
 | outputs/deployment.csv | N/A (pipeline not run) |
 | outputs/reg_friction.csv | N/A (pipeline not run) |
 | outputs/cluster_index.csv | N/A (pipeline not run) |
-| outputs/Electrotech_Index_Tables.xlsx | N/A (pipeline not run) |
+| outputs/Electro-Industrial_Index_Tables.xlsx | N/A (pipeline not run) |
 | outputs/metadata/run_metadata.csv | N/A (pipeline not run) |
 
 ## Post-refactor baseline
@@ -31,11 +31,11 @@ The post-refactor pipeline could not be executed because `Rscript` is not availa
 
 | Output file | Checksum (sha256) |
 | --- | --- |
-| outputs/electrotech.csv | N/A (pipeline not run) |
+| outputs/Electro-Industrial.csv | N/A (pipeline not run) |
 | outputs/deployment.csv | N/A (pipeline not run) |
 | outputs/reg_friction.csv | N/A (pipeline not run) |
 | outputs/cluster_index.csv | N/A (pipeline not run) |
-| outputs/Electrotech_Index_Tables.xlsx | N/A (pipeline not run) |
+| outputs/Electro-Industrial_Index_Tables.xlsx | N/A (pipeline not run) |
 | outputs/metadata/run_metadata.csv | N/A (pipeline not run) |
 
 ## Reference repo access

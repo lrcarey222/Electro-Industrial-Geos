@@ -1,10 +1,10 @@
-Package: electrotechindex
-Title: Electrotech Index Pipeline
+Package: Electro-Industrialindex
+Title: Electro-Industrial Index Pipeline
 Version: 0.1.0
 Authors@R: c(
     person("OpenAI Codex", role = c("aut", "cre"), email = "noreply@example.com")
 )
-Description: Reproducible pipeline and utilities to build the Electrotech Index
+Description: Reproducible pipeline and utilities to build the Electro-Industrial Index
     from public and proprietary data sources, with a targets workflow and
     documented methodology.
 License: MIT + file LICENSE

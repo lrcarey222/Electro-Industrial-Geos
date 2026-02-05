@@ -21,6 +21,6 @@ This repository combines public and proprietary datasets into a single `inputs.c
 - CNBC infrastructure ranking
 - Investment monitoring datasets (clean tech, semiconductors, batteries, etc.)
 
-When running in CI or without access to proprietary data, set `ELECTROTECH_USE_SAMPLE_DATA=true` (default) to use `data/examples/sample_inputs.csv`.
+When running in CI or without access to proprietary data, set `Electro-Industrial_USE_SAMPLE_DATA=true` (default) to use `data/examples/sample_inputs.csv`.
 
-Legacy raw files referenced in `Legacy Script/Electrotech_State.R` should be staged under `data/raw/` with matching relative paths. URL-based sources are downloaded into `data/raw/remote/` during `scripts/05_ingest_sources.R` unless `SKIP_DATA_DOWNLOADS=true`.
+Legacy raw files referenced in `Legacy Script/Electro-Industrial_State.R` should be staged under `data/raw/` with matching relative paths. URL-based sources are downloaded into `data/raw/remote/` during `scripts/05_ingest_sources.R` unless `SKIP_DATA_DOWNLOADS=true`.
