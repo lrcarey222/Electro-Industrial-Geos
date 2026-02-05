@@ -1,4 +1,4 @@
-paths <- getOption("Electro-Industrial.paths")
+paths <- getOption("Electro_Industrial.paths")
 
 if (is.null(paths)) {
   rlang::abort("Paths not configured. Ensure scripts/00_setup.R ran successfully.")

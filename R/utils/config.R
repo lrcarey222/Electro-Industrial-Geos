@@ -19,7 +19,7 @@ read_yaml_file <- function(path, required = TRUE) {
 #' @param root Repo root.
 #' @return Config list.
 #' @export
-load_Electro-Industrial_config <- function(root) {
+load_Electro_Industrial_config <- function(root) {
   config_path <- Sys.getenv(
     "Electro-Industrial_CONFIG",
     fs::path(root, "config", "config.yml")
@@ -32,7 +32,7 @@ load_Electro-Industrial_config <- function(root) {
 #' @param root Repo root.
 #' @return Weights list.
 #' @export
-load_Electro-Industrial_weights <- function(root) {
+load_Electro_Industrial_weights <- function(root) {
   weights_path <- Sys.getenv(
     "Electro-Industrial_WEIGHTS",
     fs::path(root, "config", "weights.yml")
@@ -74,12 +74,12 @@ load_missing_data <- function(root) {
 #' @param missing_data Missing data list.
 #' @return Invisible TRUE.
 #' @export
-set_Electro-Industrial_options <- function(cfg, weights, index_definition = NULL, missing_data = NULL) {
+set_Electro_Industrial_options <- function(cfg, weights, index_definition = NULL, missing_data = NULL) {
   options(
-    Electro-Industrial.config = cfg,
-    Electro-Industrial.weights = weights,
-    Electro-Industrial.index_definition = index_definition,
-    Electro-Industrial.missing_data = missing_data
+    Electro_Industrial.config = cfg,
+    Electro_Industrial.weights = weights,
+    Electro_Industrial.index_definition = index_definition,
+    Electro_Industrial.missing_data = missing_data
   )
   invisible(TRUE)
 }

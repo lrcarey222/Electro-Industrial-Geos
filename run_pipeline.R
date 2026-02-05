@@ -20,4 +20,4 @@ repo_root <- find_root()
 source(file.path(repo_root, "R", "utils", "path_helpers.R"))
 source(file.path(repo_root, "R", "utils", "pipeline.R"))
 
-run_Electro-Industrial_pipeline(repo_root)
+run_Electro_Industrial_pipeline(repo_root)

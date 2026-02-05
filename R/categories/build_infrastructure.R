@@ -6,7 +6,7 @@
 build_infrastructure_index <- function(inputs) {
   positive <- c("renewable_potential", "ev_stations_cap", "electricity_price")
   negative <- c("interconnection_queue", "cnbc_rank")
-  weights_cfg <- getOption("Electro-Industrial.weights")
+  weights_cfg <- getOption("Electro_Industrial.weights")
   weights <- weights_cfg$infrastructure %||% list(
     renewable_potential = 0.2,
     ev_stations_cap = 0.2,

@@ -7,7 +7,7 @@
 #' @return Invisible TRUE.
 #' @export
 export_outputs <- function(outputs, paths, raw_inputs = NULL, index_definition = NULL) {
-  readr::write_csv(outputs$Electro-Industrial, fs::path(paths$output_dir, "Electro-Industrial.csv"))
+  readr::write_csv(outputs[["Electro-Industrial"]], fs::path(paths$output_dir, "Electro-Industrial.csv"))
   readr::write_csv(outputs$deployment, fs::path(paths$output_dir, "deployment.csv"))
   readr::write_csv(outputs$regulatory, fs::path(paths$output_dir, "reg_friction.csv"))
   readr::write_csv(outputs$cluster, fs::path(paths$output_dir, "cluster_index.csv"))
@@ -26,7 +26,7 @@ export_outputs <- function(outputs, paths, raw_inputs = NULL, index_definition =
   openxlsx::addWorksheet(wb, "Cluster_Index")
   openxlsx::writeData(wb, "Cluster_Index", outputs$cluster)
   openxlsx::addWorksheet(wb, "Electro-Industrial_Combined")
-  openxlsx::writeData(wb, "Electro-Industrial_Combined", outputs$Electro-Industrial)
+  openxlsx::writeData(wb, "Electro-Industrial_Combined", outputs[["Electro-Industrial"]])
 
   openxlsx::saveWorkbook(
     wb,

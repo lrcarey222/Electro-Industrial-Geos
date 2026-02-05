@@ -6,9 +6,9 @@
 #' @param policy Policy intent data frame.
 #' @param regulatory Regulatory ease data frame.
 #' @param cluster Cluster index data frame.
-#' @return Data frame with Electro-Industrial_index and Electro-Industrial_index_w.
+#' @return Data frame with Electro_Industrial_index and Electro_Industrial_index_w.
 #' @export
-build_Electro-Industrial_index <- function(
+build_Electro_Industrial_index <- function(
   deployment,
   infrastructure,
   economic,
@@ -16,8 +16,8 @@ build_Electro-Industrial_index <- function(
   regulatory,
   cluster
 ) {
-  weights_cfg <- getOption("Electro-Industrial.weights")
-  weights <- weights_cfg$Electro-Industrial %||% list(
+  weights_cfg <- getOption("Electro_Industrial.weights")
+  weights <- weights_cfg[["Electro-Industrial"]] %||% list(
     deployment_index = 0.4,
     infra_index = 0.15,
     econ_index = 0.15,
@@ -44,7 +44,7 @@ build_Electro-Industrial_index <- function(
 
   scaled %>%
     dplyr::mutate(
-      Electro-Industrial_index = rowSums(dplyr::select(., deployment_index, infra_index, econ_index, intent_index, cluster_index, ease_index), na.rm = TRUE),
-      Electro-Industrial_index_w = weighted_index(., weights)
+      Electro_Industrial_index = rowSums(dplyr::select(., deployment_index, infra_index, econ_index, intent_index, cluster_index, ease_index), na.rm = TRUE),
+      Electro_Industrial_index_w = weighted_index(., weights)
     )
 }
