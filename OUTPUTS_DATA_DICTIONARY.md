@@ -56,6 +56,10 @@
 | battery_manufacturing | Battery manufacturing |
 | solar_manufacturing | Solar manufacturing |
 | ev_manufacturing | EV manufacturing |
+| dominant_anchor | Anchor metric with the maximum scaled contribution |
+| positive | Mean of scaled positive cluster indicators |
+| negative | Mean of scaled reversed negative indicators |
+| cluster_top | State label for high-performing clusters (cluster_index > 0.5) |
 | cluster_index | Cluster sub-index (0-1) |
 
 ## outputs/Electro-Industrial_Index_Tables.xlsx

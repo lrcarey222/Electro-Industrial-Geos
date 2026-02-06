@@ -50,4 +50,4 @@ categories:
       - solar_manufacturing
       - ev_manufacturing
     polarity: mixed
-    notes: "Cluster index uses the max anchor among manufacturing variables plus the base mean, then rescales."
+    notes: "Cluster index uses the max anchor among manufacturing variables plus the base mean, then rescales. Output includes dominant_anchor, positive/negative summaries, and cluster_top for cluster_index > 0.5."
