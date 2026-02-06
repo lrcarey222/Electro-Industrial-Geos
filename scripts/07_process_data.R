@@ -986,13 +986,43 @@ if (requireNamespace("blsQCEW", quietly = TRUE) && requireNamespace("tidycensus"
   electric_man_4d <- unique(stringr::str_sub(electric_man_6d, 1, 4))
 
   county_codes <- tidycensus::fips_codes %>%
-    dplyr::transmute(area_code = paste0(.data$state_code, .data$county_code), state_abbr = .data$state) %>%
+    dplyr::transmute(
+      area_code = sprintf("%02d%03d", as.integer(.data$state_code), as.integer(.data$county_code)),
+      state_abbr = .data$state
+    ) %>%
     dplyr::distinct()
 
-  fetch_county_qtr <- purrr::possibly(
-    function(area_code, y, q) blsQCEW::blsQCEW("Area", year = y, quarter = q, area = area_code),
-    otherwise = NULL
-  )
+  fetch_county_qtr <- function(area_code, y, q) {
+    y_try <- c(as.character(y), as.integer(y))
+    q_try <- unique(c(as.character(q), paste0("q", as.character(q))))
+
+    for (yy in y_try) {
+      for (qq in q_try) {
+        out <- tryCatch(
+          blsQCEW::blsQCEW("Area", year = yy, quarter = qq, area = area_code),
+          error = function(e) NULL
+        )
+        if (!is.null(out) && nrow(out) > 0) {
+          return(out)
+        }
+      }
+    }
+    NULL
+  }
+
+  detect_latest_yq <- function(sample_area = "01001") {
+    candidates <- tidyr::expand_grid(year = 2026:2020, quarter = c("4", "3", "2", "1")) %>%
+      dplyr::arrange(dplyr::desc(.data$year), dplyr::desc(.data$quarter))
+
+    for (i in seq_len(nrow(candidates))) {
+      probe <- fetch_county_qtr(sample_area, candidates$year[i], candidates$quarter[i])
+      if (!is.null(probe) && nrow(probe) > 0) {
+        return(list(year = as.character(candidates$year[i]), quarter = as.character(candidates$quarter[i])))
+      }
+    }
+
+    list(year = "2025", quarter = "2")
+  }
 
   pull_qtr <- function(y, q) {
     purrr::map_dfr(county_codes$area_code, function(ac) {
@@ -1000,11 +1030,13 @@ if (requireNamespace("blsQCEW", quietly = TRUE) && requireNamespace("tidycensus"
       if (is.null(df) || nrow(df) == 0) {
         return(tibble::tibble())
       }
+      Sys.sleep(0.03)
       df %>% dplyr::mutate(area_code = ac)
     })
   }
 
-  all_latest <- tryCatch(pull_qtr("2025", "2"), error = function(e) tibble::tibble())
+  latest_yq <- detect_latest_yq("01001")
+  all_latest <- tryCatch(pull_qtr(latest_yq$year, latest_yq$quarter), error = function(e) tibble::tibble())
   all_2022q1 <- tryCatch(pull_qtr("2022", "1"), error = function(e) tibble::tibble())
 
   if (nrow(all_latest) > 0) {
