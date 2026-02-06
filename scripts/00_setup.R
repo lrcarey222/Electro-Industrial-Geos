@@ -13,6 +13,7 @@ suppressPackageStartupMessages({
   library(tigris)
   library(yaml)
   library(openxlsx)
+  library(readxl)
 })
 
 if (!exists("repo_root", inherits = FALSE) || is.null(repo_root)) {

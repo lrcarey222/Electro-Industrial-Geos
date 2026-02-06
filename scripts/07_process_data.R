@@ -723,9 +723,9 @@ if (!is.null(datacenter_raw)) {
     dplyr::filter(Date == "2025-03-31") %>%
     dplyr::transmute(
       name = .data$Company,
-      tech = paste(.data$`Facility Category`, "Datacenter"),
+      tech = paste(.data$`Facility.Category`, "Datacenter"),
       cat = "Datacenter",
-      size = .data$`Headline Capacity (MW)`,
+      size = .data$`Headline.Capacity.(MW)`,
       Latitude = .data$Latitude,
       Longitude = .data$Longitude,
       state_abbr = .data$STUSPS,
@@ -739,9 +739,9 @@ if (!is.null(datacenter_raw)) {
     dplyr::filter(Date == "2025-03-31") %>%
     dplyr::group_by(STATE) %>%
     dplyr::summarize(
-      headline_mw = sum(`Headline Capacity (MW)`, na.rm = TRUE),
-      construction_mw = sum(`Under Construction Capacity (MW)`, na.rm = TRUE),
-      committed_mw = sum(`Committed Capacity (MW)`, na.rm = TRUE)
+      headline_mw = sum(`Headline.Capacity.(MW)`, na.rm = TRUE),
+      construction_mw = sum(`Under.Construction.Capacity.(MW)`, na.rm = TRUE),
+      committed_mw = sum(`Committed.Capacity.(MW)`, na.rm = TRUE)
     ) %>%
     dplyr::left_join(states_gen, by = c("STATE" = "State")) %>%
     dplyr::mutate(datacenter_share = headline_mw / .data$nameplate_capacity_mw) %>%
@@ -762,6 +762,7 @@ if (!is.null(datacenter_raw)) {
   datacenter_mw <- datacenter_states %>%
     dplyr::transmute(state = STATE, datacenter_mw = headline_mw)
 }
+
 datacenter_index <- ensure_optional_numeric(datacenter_index, "datacenter_index")
 datacenter_mw <- ensure_optional_numeric(datacenter_mw, "datacenter_mw")
 
@@ -824,7 +825,7 @@ if (!is.null(semiconductor_raw) && !is.null(socioecon)) {
 semiconductor_investment <- ensure_optional_numeric(semiconductor_investment, "semiconductor_investment")
 
 
-# ---- Cluster Inputs (legacy cluster section wiring) ---------------------
+# ---- Cluster Inputs  ---------------------
 semiconductor_manufacturing <- NULL
 if (!is.null(semiconductor_raw)) {
   semiconductor_raw <- semiconductor_raw %>% janitor::clean_names()
@@ -843,6 +844,7 @@ if (!is.null(semiconductor_raw)) {
   }
 }
 semiconductor_manufacturing <- ensure_optional_numeric(semiconductor_manufacturing, "semiconductor_manufacturing")
+
 
 cluster_manufacturing <- NULL
 quarterly_path <- fs::path(raw_dir, "clean_investment_monitor_q2_2025", "quarterly_actual_investment.csv")
@@ -870,13 +872,14 @@ if (!is.null(quarterly_actual)) {
       tidyr::pivot_wider(names_from = .data$technology, values_from = .data$value, values_fill = 0) %>%
       dplyr::left_join(states, by = c("state" = "abbr")) %>%
       dplyr::transmute(
-        state = dplyr::coalesce(.data$state.y, .data$state.x),
+        state = dplyr::coalesce(.data$state),
         battery_manufacturing = .data$battery_manufacturing,
         solar_manufacturing = .data$solar_manufacturing,
         ev_manufacturing = .data$ev_manufacturing
       )
   }
 }
+
 if (is.null(cluster_manufacturing)) {
   cluster_manufacturing <- tibble::tibble(
     state = character(),
@@ -886,31 +889,36 @@ if (is.null(cluster_manufacturing)) {
   )
 }
 
-industrial_electricity_price <- NULL
-industrial_price_path <- fs::path(raw_dir, "table_8.xlsx")
-industrial_price_raw <- read_optional_xlsx(industrial_price_path, sheet = 1, start_row = 3)
-if (!is.null(industrial_price_raw)) {
-  industrial_price_raw <- industrial_price_raw %>% janitor::clean_names()
-  state_col <- intersect(c("state", "state_name"), names(industrial_price_raw))[1]
-  price_col <- intersect(c("average_price_cents_kwh", "average_price_cents_per_kwh", "average_price"), names(industrial_price_raw))[1]
-  if (!is.na(state_col) && !is.na(price_col)) {
-    industrial_electricity_price <- industrial_price_raw %>%
-      dplyr::transmute(
-        state_raw = stringr::str_trim(as.character(.data[[state_col]])),
-        industrial_electricity_price = readr::parse_number(as.character(.data[[price_col]]))
-      ) %>%
-      dplyr::mutate(
-        state = dplyr::case_when(
-          nchar(.data$state_raw) == 2 ~ states$state[match(.data$state_raw, states$abbr)],
-          TRUE ~ .data$state_raw
-        )
-      ) %>%
-      dplyr::filter(!is.na(.data$state)) %>%
-      dplyr::group_by(.data$state) %>%
-      dplyr::summarize(industrial_electricity_price = mean(.data$industrial_electricity_price, na.rm = TRUE), .groups = "drop")
-  }
-}
-industrial_electricity_price <- ensure_optional_numeric(industrial_electricity_price, "industrial_electricity_price")
+#Monthly Industrial Electricity Prices---------------
+url <- "https://www.eia.gov/electricity/data/eia861m/xls/sales_revenue.xlsx"
+destination_folder <- "OneDrive - RMI/Documents - US Program/6_Projects/Clean Regional Economic Development/ACRE/Data/States Data/"
+file_path <- file.path(destination_folder, "eia_sales.xlsx")
+
+dir.create(destination_folder, recursive = TRUE, showWarnings = FALSE)
+
+download.file(url, destfile = file_path, mode = "wb")
+
+#EIA Sales
+eia_sales <- read_excel(file_path, sheet = 1,skip=2)
+
+#State Totals Industrial Prices
+ind_price_m <- eia_sales %>%
+  mutate(ind_price_m=`Cents/kWh...16`) %>%
+  select(State,Year,Month,ind_price_m)
+
+ind_price_a<-ind_price_m %>%
+  group_by(State,Year) %>%
+  summarize(across(c(ind_price_m),mean,na.rm=T))
+
+this_year <- as.integer(format(Sys.Date(), "%Y"))
+
+industrial_electricity_price <- ind_price_a %>%
+  dplyr::filter(Year %in% c(this_year, this_year - 1)) %>%
+  dplyr::arrange(dplyr::desc(Year)) %>%
+  dplyr::group_by(State) %>%        # remove if you don't need per-State selection
+  dplyr::slice(1) %>%
+  dplyr::ungroup() %>%
+  select(-Year)
 
 
 # ---- Electrotech facilities chart wiring ---------------------------------
@@ -1118,7 +1126,7 @@ raw_updates <- states %>%
   safe_left_join(cpcn, by = "state") %>%
   safe_left_join(regdata, by = "state") %>%
   safe_left_join(ordinance, by = "state") %>%
-  safe_left_join(sepa, by = "state") %>%
+  safe_left_join(spot, by = "state") %>%
   safe_left_join(sepa, by = "state") %>%
   safe_left_join(gdp_growth_index, by = "state") %>%
   safe_left_join(economic_dynamism, by = "state") %>%
@@ -1134,8 +1142,8 @@ raw_updates <- states %>%
   safe_left_join(clean_electric_capacity_growth, by = "state") %>%
   safe_left_join(datacenter_mw, by = "state") %>%
   safe_left_join(semiconductor_manufacturing, by = "state") %>%
-  safe_left_join(cluster_manufacturing, by = "state") %>%
-  safe_left_join(industrial_electricity_price, by = "state") %>%
+  safe_left_join(cluster_manufacturing, by = c("abbr"="state")) %>%
+  safe_left_join(industrial_electricity_price, by = c("abbr"="State")) %>%
   safe_left_join(workforce_share_update, by = "state") %>%
   safe_left_join(workforce_growth_update, by = "state")
 
@@ -1168,9 +1176,9 @@ processed_inputs <- processed_inputs %>%
     battery_manufacturing = dplyr::coalesce(`battery_manufacturing.raw`, battery_manufacturing),
     solar_manufacturing = dplyr::coalesce(`solar_manufacturing.raw`, solar_manufacturing),
     ev_manufacturing = dplyr::coalesce(`ev_manufacturing.raw`, ev_manufacturing),
-    industrial_electricity_price = dplyr::coalesce(`industrial_electricity_price.raw`, industrial_electricity_price),
-    workforce_share = dplyr::coalesce(`workforce_share.raw`, workforce_share),
-    workforce_growth = dplyr::coalesce(`workforce_growth.raw`, workforce_growth)
+    industrial_electricity_price = dplyr::coalesce(industrial_electricity_price),
+    #workforce_share = dplyr::coalesce(`workforce_share.raw`, workforce_share),
+    #workforce_growth = dplyr::coalesce(`workforce_growth.raw`, workforce_growth)
   ) %>%
   dplyr::select(-dplyr::ends_with(".raw"))
 
