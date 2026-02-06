@@ -8,9 +8,12 @@
 #' @export
 export_outputs <- function(outputs, paths, raw_inputs = NULL, index_definition = NULL) {
   readr::write_csv(outputs[["Electro-Industrial"]], fs::path(paths$output_dir, "Electro-Industrial.csv"))
+  readr::write_csv(outputs[["Electro-Industrial"]], fs::path(paths$output_dir, "Electro-Industrial_state.csv"))
+  readr::write_csv(outputs[["Electro-Industrial-PEA"]], fs::path(paths$output_dir, "Electro-Industrial_pea.csv"))
   readr::write_csv(outputs$deployment, fs::path(paths$output_dir, "deployment.csv"))
   readr::write_csv(outputs$regulatory, fs::path(paths$output_dir, "reg_friction.csv"))
   readr::write_csv(outputs$cluster, fs::path(paths$output_dir, "cluster_index.csv"))
+  readr::write_csv(outputs$cluster_pea, fs::path(paths$output_dir, "cluster_index_pea.csv"))
 
   wb <- openxlsx::createWorkbook()
   openxlsx::addWorksheet(wb, "Policy_Intent")
@@ -25,8 +28,12 @@ export_outputs <- function(outputs, paths, raw_inputs = NULL, index_definition =
   openxlsx::writeData(wb, "Infrastructure", outputs$infrastructure)
   openxlsx::addWorksheet(wb, "Cluster_Index")
   openxlsx::writeData(wb, "Cluster_Index", outputs$cluster)
+  openxlsx::addWorksheet(wb, "Cluster_Index_PEA")
+  openxlsx::writeData(wb, "Cluster_Index_PEA", outputs$cluster_pea)
   openxlsx::addWorksheet(wb, "Electro-Industrial_Combined")
   openxlsx::writeData(wb, "Electro-Industrial_Combined", outputs[["Electro-Industrial"]])
+  openxlsx::addWorksheet(wb, "Electro-Industrial_PEA")
+  openxlsx::writeData(wb, "Electro-Industrial_PEA", outputs[["Electro-Industrial-PEA"]])
 
   openxlsx::saveWorkbook(
     wb,

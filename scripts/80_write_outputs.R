@@ -7,8 +7,10 @@ outputs <- list(
   economic = economic_caps,
   infrastructure = infrastructure,
   deployment = deployment,
+  cluster_pea = cluster_pea,
   cluster = cluster,
-  `Electro-Industrial` = Electro_Industrial
+  `Electro-Industrial` = Electro_Industrial,
+  `Electro-Industrial-PEA` = Electro_Industrial_pea
 )
 
 export_outputs(

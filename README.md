@@ -7,9 +7,12 @@ This repository builds the Electro-Industrial Index and its component sub-indice
 Running the pipeline generates the following deliverables in `outputs/`:
 
 - `outputs/Electro-Industrial.csv`
+- `outputs/Electro-Industrial_state.csv`
+- `outputs/Electro-Industrial_pea.csv`
 - `outputs/deployment.csv`
 - `outputs/reg_friction.csv`
 - `outputs/cluster_index.csv`
+- `outputs/cluster_index_pea.csv`
 - `outputs/Electro-Industrial_Index_Tables.xlsx`
 - `outputs/metadata/run_metadata.csv`
 
