@@ -2,6 +2,10 @@
 
 ## outputs/Electro-Industrial.csv
 
+Legacy alias of `outputs/Electro-Industrial_state.csv`.
+
+## outputs/Electro-Industrial_state.csv
+
 | Column | Description |
 | --- | --- |
 | state | State name |
@@ -59,8 +63,41 @@
 | dominant_anchor | Anchor metric with the maximum scaled contribution |
 | positive | Mean of scaled positive cluster indicators |
 | negative | Mean of scaled reversed negative indicators |
-| cluster_top | State label for high-performing clusters (cluster_index > 0.5) |
+| cluster_top | Top PEA label for high-performing clusters (cluster_index > 0.5) |
 | cluster_index | Cluster sub-index (0-1) |
+
+## outputs/cluster_index_pea.csv
+
+| Column | Description |
+| --- | --- |
+| economic_area | PEA name |
+| state | State name |
+| abbr | State abbreviation |
+| workforce_share | Workforce share |
+| workforce_growth | Workforce growth |
+| industry_feasibility | Industry feasibility |
+| clean_electric_capacity_growth | Clean electric capacity growth |
+| industrial_electricity_price | Industrial electricity price |
+| datacenter_mw | Datacenter MW |
+| semiconductor_manufacturing | Semiconductor manufacturing |
+| battery_manufacturing | Battery manufacturing |
+| solar_manufacturing | Solar manufacturing |
+| ev_manufacturing | EV manufacturing |
+| dominant_anchor | Anchor metric with the maximum scaled contribution |
+| positive | Mean of scaled positive cluster indicators |
+| negative | Mean of scaled reversed negative indicators |
+| cluster_top | PEA label for high-performing clusters (cluster_index > 0.5) |
+| cluster_index | Cluster sub-index (0-1) |
+
+## outputs/Electro-Industrial_pea.csv
+
+| Column | Description |
+| --- | --- |
+| economic_area | PEA name |
+| state | State name |
+| cluster_index | Cluster sub-index (0-1) |
+| Electro_Industrial_index | PEA Electro-Industrial index (cluster-driven) |
+| Electro_Industrial_index_w | Weighted PEA Electro-Industrial index (cluster-driven) |
 
 ## outputs/Electro-Industrial_Index_Tables.xlsx
 

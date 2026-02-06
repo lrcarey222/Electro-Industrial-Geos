@@ -47,3 +47,34 @@ cluster <- build_cluster_index(
   )
 ) %>%
   dplyr::mutate(state = state)
+
+cluster_pea_path <- fs::path(paths$processed_dir, "cluster_pea_inputs_processed.csv")
+cluster_pea <- if (fs::file_exists(cluster_pea_path)) {
+  readr::read_csv(cluster_pea_path, show_col_types = FALSE)
+} else {
+  processed_inputs %>%
+    dplyr::transmute(
+      economic_area = paste0(.data$state, " (", .data$abbr, ")"),
+      state,
+      abbr,
+      workforce_share,
+      workforce_growth,
+      industry_feasibility,
+      clean_electric_capacity_growth,
+      industrial_electricity_price,
+      datacenter_mw,
+      semiconductor_manufacturing,
+      battery_manufacturing,
+      solar_manufacturing,
+      ev_manufacturing
+    )
+}
+
+cluster_pea <- build_cluster_index(
+  cluster_pea,
+  geo_col = "economic_area",
+  top_label_col = "economic_area"
+)
+
+cluster <- build_state_cluster_from_pea(cluster_pea) %>%
+  dplyr::mutate(state = as.character(.data$state))

@@ -10,3 +10,5 @@ Electro_Industrial <- build_Electro_Industrial_index(
   regulatory_ease,
   cluster
 )
+
+Electro_Industrial_pea <- build_Electro_Industrial_pea_index(cluster_pea)

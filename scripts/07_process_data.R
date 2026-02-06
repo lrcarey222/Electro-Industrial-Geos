@@ -1192,6 +1192,54 @@ if (length(missing_cols) > 0) {
 
 validated_inputs <- validate_inputs_schema(processed_inputs, required_cols)
 
+# ---- PEA Cluster Inputs --------------------------------------------------
+cluster_pea_path <- fs::path(raw_dir, "cluster_pea_inputs.csv")
+cluster_pea_inputs <- NULL
+if (fs::file_exists(cluster_pea_path)) {
+  pea_raw <- readr::read_csv(cluster_pea_path, show_col_types = FALSE) %>%
+    janitor::clean_names()
+
+  required_cluster_cols <- c(
+    "workforce_share", "workforce_growth", "industry_feasibility",
+    "clean_electric_capacity_growth", "industrial_electricity_price", "datacenter_mw",
+    "semiconductor_manufacturing", "battery_manufacturing", "solar_manufacturing", "ev_manufacturing"
+  )
+
+  area_col <- intersect(c("economic_area", "pea_name", "fcc_pea_name"), names(pea_raw))[1]
+  state_col <- intersect(c("state", "state_name"), names(pea_raw))[1]
+  abbr_col <- intersect(c("abbr", "state_abbr", "state_code"), names(pea_raw))[1]
+
+  if (!is.na(area_col) && !is.na(state_col) && !is.na(abbr_col)) {
+    cluster_pea_inputs <- pea_raw %>%
+      dplyr::transmute(
+        economic_area = as.character(.data[[area_col]]),
+        state = as.character(.data[[state_col]]),
+        abbr = as.character(.data[[abbr_col]]),
+        dplyr::across(dplyr::all_of(required_cluster_cols), ~ suppressWarnings(as.numeric(.x)))
+      )
+  }
+}
+
+if (is.null(cluster_pea_inputs) || nrow(cluster_pea_inputs) == 0) {
+  cluster_pea_inputs <- validated_inputs %>%
+    dplyr::transmute(
+      economic_area = paste0(.data$state, " (", .data$abbr, ")"),
+      state,
+      abbr,
+      workforce_share,
+      workforce_growth,
+      industry_feasibility,
+      clean_electric_capacity_growth,
+      industrial_electricity_price,
+      datacenter_mw,
+      semiconductor_manufacturing,
+      battery_manufacturing,
+      solar_manufacturing,
+      ev_manufacturing
+    )
+}
+
 # ---- Output --------------------------------------------------------------
 processed_path <- fs::path(paths$processed_dir, "inputs_processed.csv")
 readr::write_csv(validated_inputs, processed_path)
+readr::write_csv(cluster_pea_inputs, fs::path(paths$processed_dir, "cluster_pea_inputs_processed.csv"))

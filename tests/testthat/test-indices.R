@@ -12,6 +12,7 @@ source("R/categories/build_infrastructure.R")
 source("R/categories/build_deployment.R")
 source("R/categories/build_cluster_index.R")
 source("R/indices/build_Electro-Industrial_index.R")
+source("R/indices/build_Electro-Industrial_pea_index.R")
 
 options(
   Electro_Industrial.paths = list(examples_dir = "tests/fixtures"),
@@ -78,6 +79,31 @@ test_that("cluster index uses max anchor", {
   expect_true(out$cluster_index[1] >= out$cluster_index[2])
   expect_true(out$dominant_anchor[1] == "semiconductor_manufacturing")
   expect_true(out$cluster_top[1] != "")
+})
+
+test_that("state cluster rolls up top PEA cluster", {
+  cluster_pea <- tibble::tibble(
+    economic_area = c("Metro A", "Metro B", "Metro C"),
+    state = c("Texas", "Texas", "California"),
+    abbr = c("TX", "TX", "CA"),
+    cluster_index = c(0.6, 0.9, 0.5),
+    cluster_top = c("Metro A", "Metro B", "")
+  )
+
+  state_cluster <- build_state_cluster_from_pea(cluster_pea)
+  expect_equal(nrow(state_cluster), 2)
+  expect_equal(state_cluster$economic_area[state_cluster$state == "Texas"], "Metro B")
+})
+
+test_that("PEA Electro-Industrial index is cluster-driven", {
+  cluster_pea <- tibble::tibble(
+    economic_area = c("Metro A", "Metro B"),
+    state = c("Texas", "California"),
+    cluster_index = c(0.8, 0.4)
+  )
+
+  pea_index <- build_Electro_Industrial_pea_index(cluster_pea)
+  expect_equal(pea_index$Electro_Industrial_index_w, pea_index$cluster_index)
 })
 
 test_that("Electro-Industrial weighted index matches fixture", {
