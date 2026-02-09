@@ -1237,6 +1237,100 @@ if (is.null(cluster_pea_inputs) || nrow(cluster_pea_inputs) == 0) {
       solar_manufacturing,
       ev_manufacturing
     )
+
+  pea_shapefile <- fs::path(raw_dir, "FCC_PEAs_website.shp")
+  pea_sidecars <- c(
+    pea_shapefile,
+    fs::path_ext_set(pea_shapefile, "dbf"),
+    fs::path_ext_set(pea_shapefile, "shx")
+  )
+  pea_can_read <- all(fs::file_exists(pea_sidecars))
+
+  if (pea_can_read && nrow(electrotech_fac) > 0 && requireNamespace("sf", quietly = TRUE)) {
+    pea_sf <- tryCatch(
+      suppressWarnings(sf::st_read(pea_shapefile, quiet = TRUE)),
+      error = function(e) NULL
+    )
+
+    if (!is.null(pea_sf) && nrow(pea_sf) > 0) {
+      pea_names <- names(pea_sf)
+      pea_name_col <- intersect(c("PEA_Name", "PEA_NAME", "pea_name", "name"), pea_names)[1]
+
+      if (!is.na(pea_name_col)) {
+      if (any(!sf::st_is_valid(pea_sf))) {
+        pea_sf <- sf::st_make_valid(pea_sf)
+      }
+
+      pea_sf <- pea_sf %>%
+        sf::st_transform(4326) %>%
+        dplyr::transmute(economic_area = as.character(.data[[pea_name_col]]))
+
+      pea_points <- electrotech_fac %>%
+        dplyr::filter(!is.na(.data$Latitude), !is.na(.data$Longitude)) %>%
+        sf::st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326, remove = FALSE)
+
+      pea_facilities <- pea_points %>%
+        sf::st_join(pea_sf, join = sf::st_intersects, left = FALSE) %>%
+        sf::st_drop_geometry() %>%
+        dplyr::filter(!is.na(.data$economic_area), !is.na(.data$state_abbr))
+
+      if (nrow(pea_facilities) > 0) {
+        pea_indicator_rollup <- pea_facilities %>%
+          dplyr::mutate(cat_lower = stringr::str_to_lower(as.character(.data$cat))) %>%
+          dplyr::group_by(.data$economic_area, .data$state_abbr) %>%
+          dplyr::summarize(
+            datacenter_mw = sum(dplyr::if_else(stringr::str_detect(.data$cat_lower, "data"), .data$size, 0), na.rm = TRUE),
+            semiconductor_manufacturing = sum(dplyr::if_else(stringr::str_detect(.data$cat_lower, "semiconductor"), .data$size, 0), na.rm = TRUE),
+            battery_manufacturing = sum(dplyr::if_else(stringr::str_detect(.data$cat_lower, "battery"), .data$size, 0), na.rm = TRUE),
+            solar_manufacturing = sum(dplyr::if_else(stringr::str_detect(.data$cat_lower, "solar"), .data$size, 0), na.rm = TRUE),
+            ev_manufacturing = sum(dplyr::if_else(stringr::str_detect(.data$cat_lower, "ev|vehicle"), .data$size, 0), na.rm = TRUE),
+            .groups = "drop"
+          ) %>%
+          dplyr::left_join(states, by = c("state_abbr" = "abbr")) %>%
+          dplyr::transmute(
+            economic_area,
+            state,
+            abbr = .data$state_abbr,
+            datacenter_mw,
+            semiconductor_manufacturing,
+            battery_manufacturing,
+            solar_manufacturing,
+            ev_manufacturing
+          )
+
+        if (nrow(pea_indicator_rollup) > 0) {
+          cluster_pea_inputs <- pea_indicator_rollup %>%
+            dplyr::left_join(
+              validated_inputs %>%
+                dplyr::select(
+                  .data$state,
+                  .data$workforce_share,
+                  .data$workforce_growth,
+                  .data$industry_feasibility,
+                  .data$clean_electric_capacity_growth,
+                  .data$industrial_electricity_price
+                ),
+              by = "state"
+            ) %>%
+            dplyr::select(
+              .data$economic_area,
+              .data$state,
+              .data$abbr,
+              .data$workforce_share,
+              .data$workforce_growth,
+              .data$industry_feasibility,
+              .data$clean_electric_capacity_growth,
+              .data$industrial_electricity_price,
+              .data$datacenter_mw,
+              .data$semiconductor_manufacturing,
+              .data$battery_manufacturing,
+              .data$solar_manufacturing,
+              .data$ev_manufacturing
+            )
+        }
+      }
+    }
+  }
 }
 
 # ---- Output --------------------------------------------------------------
