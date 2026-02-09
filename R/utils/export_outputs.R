@@ -14,6 +14,12 @@ export_outputs <- function(outputs, paths, raw_inputs = NULL, index_definition =
   readr::write_csv(outputs$regulatory, fs::path(paths$output_dir, "reg_friction.csv"))
   readr::write_csv(outputs$cluster, fs::path(paths$output_dir, "cluster_index.csv"))
   readr::write_csv(outputs$cluster_pea, fs::path(paths$output_dir, "cluster_index_pea.csv"))
+  readr::write_csv(outputs$policy, fs::path(paths$output_dir, "policy_intent.csv"))
+  readr::write_csv(outputs$economic, fs::path(paths$output_dir, "economic_capabilities.csv"))
+  readr::write_csv(outputs$infrastructure, fs::path(paths$output_dir, "infrastructure.csv"))
+  if (!is.null(outputs$incentives_by_sector_year)) {
+    readr::write_csv(outputs$incentives_by_sector_year, fs::path(paths$output_dir, "incentives_by_sector_year.csv"))
+  }
 
   wb <- openxlsx::createWorkbook()
   openxlsx::addWorksheet(wb, "Policy_Intent")
@@ -34,6 +40,10 @@ export_outputs <- function(outputs, paths, raw_inputs = NULL, index_definition =
   openxlsx::writeData(wb, "Electro-Industrial_Combined", outputs[["Electro-Industrial"]])
   openxlsx::addWorksheet(wb, "Electro-Industrial_PEA")
   openxlsx::writeData(wb, "Electro-Industrial_PEA", outputs[["Electro-Industrial-PEA"]])
+  if (!is.null(outputs$incentives_by_sector_year)) {
+    openxlsx::addWorksheet(wb, "Incentives_By_Sector")
+    openxlsx::writeData(wb, "Incentives_By_Sector", outputs$incentives_by_sector_year)
+  }
 
   openxlsx::saveWorkbook(
     wb,
