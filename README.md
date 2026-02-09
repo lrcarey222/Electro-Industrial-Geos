@@ -13,6 +13,10 @@ Running the pipeline generates the following deliverables in `outputs/`:
 - `outputs/reg_friction.csv`
 - `outputs/cluster_index.csv`
 - `outputs/cluster_index_pea.csv`
+- `outputs/policy_intent.csv`
+- `outputs/economic_capabilities.csv`
+- `outputs/infrastructure.csv`
+- `outputs/incentives_by_sector_year.csv` (when Good Jobs First raw input is available)
 - `outputs/Electro-Industrial_Index_Tables.xlsx`
 - `outputs/metadata/run_metadata.csv`
 
@@ -86,6 +90,17 @@ Environment variable overrides:
 ## Outputs and audits
 
 In addition to the required outputs, you can enable a long-form audit table by setting `Electro-Industrial_WRITE_AUDIT=true` (default). The audit file is written to `outputs/audit/Electro-Industrial_audit_long.csv`.
+
+
+## State profiles
+
+Generate one HTML profile per state:
+
+```bash
+Rscript scripts/20_generate_state_profiles.R
+```
+
+Profiles are written to `outputs/state_profiles/`. If Quarto is unavailable, the script writes fallback CSV component tables per state to the same directory.
 
 ## Testing
 

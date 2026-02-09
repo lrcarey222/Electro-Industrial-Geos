@@ -24,5 +24,7 @@ weighted_index <- function(data, weights) {
 #' @return Numeric vector.
 #' @export
 rowmean_index <- function(data) {
-  rowMeans(data, na.rm = TRUE)
+  means <- rowMeans(data, na.rm = TRUE)
+  means[rowSums(!is.na(data)) == 0] <- NA_real_
+  means
 }

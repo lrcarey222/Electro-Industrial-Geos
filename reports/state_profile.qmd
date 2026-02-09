@@ -1,0 +1,97 @@
+---
+title: "State Profile"
+format: html
+params:
+  state_name: "North Carolina"
+  top_n: 10
+  output_dir: "outputs"
+execute:
+  echo: false
+---
+
+```{r}
+source("scripts/00_setup.R")
+source("R/visualization/state_profile_helpers.R")
+
+paths <- getOption("Electro_Industrial.paths")
+if (!is.null(params$output_dir) && nzchar(params$output_dir)) {
+  if (fs::is_absolute_path(params$output_dir)) {
+    paths$output_dir <- params$output_dir
+  } else {
+    paths$output_dir <- fs::path(getOption("Electro_Industrial.root"), params$output_dir)
+  }
+}
+out <- load_outputs(paths)
+state_name <- params$state_name
+top_n <- params$top_n
+
+defs <- get_category_definition()
+
+categories <- list(
+  policy_intent = list(df = out$policy, idx = "intent_index", label = "Policy Intent"),
+  regulatory_ease = list(df = out$regulatory, idx = "ease_index", label = "Regulatory Ease"),
+  economic_capabilities = list(df = out$economic, idx = "econ_index", label = "Economic Capabilities"),
+  infrastructure = list(df = out$infrastructure, idx = "infra_index", label = "Infrastructure"),
+  deployment = list(df = out$deployment, idx = "deployment_index", label = "Deployment"),
+  cluster = list(df = out$cluster, idx = "cluster_index", label = "Cluster")
+)
+```
+
+## Overall
+
+```{r}
+overall <- purrr::imap_dfr(categories, function(x, nm) {
+  df <- compute_ranks(x$df, x$idx)
+  row <- df[df$state == state_name, c("state", x$idx, "rank")]
+  if (nrow(row) == 0) return(tibble::tibble())
+  tibble::tibble(category = x$label, score = row[[x$idx]], rank = row$rank)
+})
+knitr::kable(overall)
+```
+
+```{r}
+for (nm in names(categories)) {
+  cat_obj <- categories[[nm]]
+  cat("##", cat_obj$label, "\n\n")
+  cat_vars <- defs %>% dplyr::filter(.data$category == nm) %>% dplyr::pull(.data$variable)
+
+  comp_tbl <- build_category_component_table(state_name, cat_obj$df, cat_vars, cat_obj$idx)
+  cat("### Component breakdown\n\n")
+  print(knitr::kable(comp_tbl))
+
+  cat("\n### Top vs Bottom comparison\n\n")
+  print(plot_top_bottom_comparison(cat_obj$df, cat_obj$idx, state_name, top_n = top_n))
+  cat("\n\n")
+}
+```
+
+## Policy Intent: Incentives by sector since 2020
+
+```{r}
+sector_df <- out$incentives_by_sector_year
+if (nrow(sector_df) == 0) {
+  cat("Incentives by sector data is unavailable (likely missing Good Jobs First raw input).")
+} else {
+  st_sector <- sector_df %>% dplyr::filter(.data$state == state_name)
+  if (nrow(st_sector) == 0) {
+    cat("No sector-mapped incentives available for selected state since 2020.\n\n")
+  } else {
+    p <- ggplot2::ggplot(st_sector, ggplot2::aes(x = .data$year, y = .data$subs_m, color = .data$sector)) +
+      ggplot2::geom_line() + ggplot2::geom_point() +
+      ggplot2::labs(x = "Year", y = "Incentives (subs_m)", color = "Sector")
+    print(p)
+  }
+
+  peer_tbl <- sector_df %>%
+    dplyr::group_by(.data$state) %>%
+    dplyr::summarize(total_subs_m = sum(.data$subs_m, na.rm = TRUE), .groups = "drop") %>%
+    compute_ranks("total_subs_m")
+
+  top_tbl <- peer_tbl %>% dplyr::arrange(dplyr::desc(.data$total_subs_m)) %>% dplyr::slice_head(n = top_n)
+  bot_tbl <- peer_tbl %>% dplyr::arrange(.data$total_subs_m) %>% dplyr::slice_head(n = top_n)
+  peer_show <- dplyr::bind_rows(dplyr::mutate(top_tbl, peer_group = "Top"), dplyr::mutate(bot_tbl, peer_group = "Bottom")) %>%
+    dplyr::mutate(selected_state = .data$state == state_name)
+
+  knitr::kable(peer_show)
+}
+```

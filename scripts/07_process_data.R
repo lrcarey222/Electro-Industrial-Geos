@@ -177,6 +177,8 @@ state_gdp <- load_state_gdp(raw_dir)
 gjf_path <- fs::path(raw_dir, "Good Jobs First", "gjf_complete.csv")
 gjf <- read_optional_csv(gjf_path)
 
+incentives_by_sector_year <- build_incentives_by_sector_year(gjf, state_gdp)
+
 incentives <- NULL
 if (!is.null(gjf) && nrow(state_gdp) > 0) {
   gjf <- gjf %>% janitor::clean_names()
@@ -1337,3 +1339,4 @@ if (is.null(cluster_pea_inputs) || nrow(cluster_pea_inputs) == 0) {
 processed_path <- fs::path(paths$processed_dir, "inputs_processed.csv")
 readr::write_csv(validated_inputs, processed_path)
 readr::write_csv(cluster_pea_inputs, fs::path(paths$processed_dir, "cluster_pea_inputs_processed.csv"))
+readr::write_csv(incentives_by_sector_year, fs::path(paths$processed_dir, "incentives_by_sector_year_processed.csv"))

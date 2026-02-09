@@ -9,6 +9,7 @@ outputs <- list(
   deployment = deployment,
   cluster_pea = cluster_pea,
   cluster = cluster,
+  incentives_by_sector_year = if (exists("incentives_by_sector_year", inherits = TRUE)) incentives_by_sector_year else tibble::tibble(state = character(), year = integer(), sector = character(), subs_m = numeric(), incentives_gdp = numeric()),
   `Electro-Industrial` = Electro_Industrial,
   `Electro-Industrial-PEA` = Electro_Industrial_pea
 )
