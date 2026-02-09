@@ -1,0 +1,24 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<metadata xml:lang="en">
+  <Esri>
+    <CreaDate>20140604</CreaDate>
+    <CreaTime>17342300</CreaTime>
+    <ArcGISFormat>1.0</ArcGISFormat>
+    <SyncOnce>TRUE</SyncOnce>
+    <DataProperties>
+      <lineage>
+        <Process ToolSource="c:\program files (x86)\arcgis\desktop10.1\ArcToolbox\Toolboxes\Data Management Tools.tbx\DeleteField" Date="20140527" Time="124407">DeleteField FCC_PEAsCopy3 FCC_PEA_Nu</Process>
+        <Process ToolSource="c:\program files (x86)\arcgis\desktop10.1\ArcToolbox\Toolboxes\Data Management Tools.tbx\DeleteField" Date="20140604" Time="173607">DeleteField FCC_PEAs_website CntyCount;Area_2010;CCAPEA</Process>
+      </lineage>
+      <itemProps>
+        <itemLocation>
+          <linkage Sync="TRUE">file://\\fcc</linkage>
+          <protocol Sync="TRUE">Local Area Network</protocol>
+        </itemLocation>
+      </itemProps>
+      <copyHistory>
+        <copy source="C:\Bureaus-Offices\WTB\FCC_PEAs" dest="\\fcc\FCC_PEAsCopy" date="20140604" time="17342300"></copy>
+      </copyHistory>
+    </DataProperties>
+  </Esri>
+</metadata>
