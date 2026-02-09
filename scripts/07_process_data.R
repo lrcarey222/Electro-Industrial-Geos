@@ -1239,12 +1239,24 @@ if (is.null(cluster_pea_inputs) || nrow(cluster_pea_inputs) == 0) {
     )
 
   pea_shapefile <- fs::path(raw_dir, "FCC_PEAs_website.shp")
-  if (fs::file_exists(pea_shapefile) && nrow(electrotech_fac) > 0 && requireNamespace("sf", quietly = TRUE)) {
-    pea_sf <- suppressWarnings(sf::st_read(pea_shapefile, quiet = TRUE))
-    pea_names <- names(pea_sf)
-    pea_name_col <- intersect(c("PEA_Name", "PEA_NAME", "pea_name", "name"), pea_names)[1]
+  pea_sidecars <- c(
+    pea_shapefile,
+    fs::path_ext_set(pea_shapefile, "dbf"),
+    fs::path_ext_set(pea_shapefile, "shx")
+  )
+  pea_can_read <- all(fs::file_exists(pea_sidecars))
 
-    if (!is.na(pea_name_col)) {
+  if (pea_can_read && nrow(electrotech_fac) > 0 && requireNamespace("sf", quietly = TRUE)) {
+    pea_sf <- tryCatch(
+      suppressWarnings(sf::st_read(pea_shapefile, quiet = TRUE)),
+      error = function(e) NULL
+    )
+
+    if (!is.null(pea_sf) && nrow(pea_sf) > 0) {
+      pea_names <- names(pea_sf)
+      pea_name_col <- intersect(c("PEA_Name", "PEA_NAME", "pea_name", "name"), pea_names)[1]
+
+      if (!is.na(pea_name_col)) {
       if (any(!sf::st_is_valid(pea_sf))) {
         pea_sf <- sf::st_make_valid(pea_sf)
       }
