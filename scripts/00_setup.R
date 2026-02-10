@@ -14,6 +14,7 @@ suppressPackageStartupMessages({
   library(yaml)
   library(openxlsx)
   library(readxl)
+  library(blsAPI)
 })
 
 if (!exists("repo_root", inherits = FALSE) || is.null(repo_root)) {

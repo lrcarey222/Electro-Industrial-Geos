@@ -1103,7 +1103,7 @@ if (nrow(electrotech_fac) > 0) {
 # ---- County employment (legacy wiring, state-level rollup) --------------
 workforce_share_update <- NULL
 workforce_growth_update <- NULL
-if (requireNamespace("blsQCEW", quietly = TRUE) && requireNamespace("tidycensus", quietly = TRUE)) {
+
   electric_man_6d <- c(
     "513322", "513340", "513390", "515210", "517210", "517211", "517212", "517410", "517910", "517919",
     "334210", "334220", "334290", "335912", "221112", "221111", "221113", "221114", "221115", "221116", "221117", "221118", "221119", "221121",
@@ -1119,25 +1119,19 @@ if (requireNamespace("blsQCEW", quietly = TRUE) && requireNamespace("tidycensus"
     dplyr::distinct()
 
   fetch_county_qtr <- function(area_code, y, q) {
-    y_try <- c(as.character(y), as.integer(y))
-    q_try <- unique(c(as.character(q), paste0("Q", as.character(q)), paste0("q", as.character(q))))
-
-    for (yy in y_try) {
-      for (qq in q_try) {
-        out <- tryCatch(
-          blsQCEW::blsQCEW("Area", year = yy, qtr = qq, area = area_code),
-          error = function(e) NULL
-        )
-        if (!is.null(out) && nrow(out) > 0) {
-          return(out)
-        }
-      }
-    }
-    NULL
+    tryCatch(
+      blsAPI::blsQCEW("Area",
+                      year    = as.character(y),
+                      quarter = as.character(q),
+                      area    = as.character(area_code)
+      ),
+      error = function(e) NULL
+    )
   }
+  
 
   detect_latest_yq <- function(sample_area = "01001") {
-    candidates <- tidyr::expand_grid(year = 2026:2020, quarter = c("4", "3", "2", "1")) %>%
+    candidates <- tidyr::expand_grid(year = 2025:2020, quarter = c("4", "3", "2", "1")) %>%
       dplyr::arrange(dplyr::desc(.data$year), dplyr::desc(.data$quarter))
 
     for (i in seq_len(nrow(candidates))) {
@@ -1147,16 +1141,16 @@ if (requireNamespace("blsQCEW", quietly = TRUE) && requireNamespace("tidycensus"
       }
     }
 
-    list(year = "2025", quarter = "2")
+    list(year = "2025", quarter = "3")
   }
 
   pull_qtr <- function(y, q) {
     purrr::map_dfr(county_codes$area_code, function(ac) {
+      Sys.sleep(0.03)
       df <- fetch_county_qtr(ac, y, q)
       if (is.null(df) || nrow(df) == 0) {
         return(tibble::tibble())
       }
-      Sys.sleep(0.03)
       df %>% dplyr::mutate(area_code = ac)
     })
   }
