@@ -929,7 +929,8 @@ if (!is.null(facility_raw)) {
 
             pea_sf <- pea_sf %>%
               sf::st_transform(4326) %>%
-              dplyr::transmute(economic_area = as.character(.data[[pea_name_col]]))
+              dplyr::mutate(economic_area = as.character(.data[[pea_name_col]])) %>%
+              dplyr::select(.data$economic_area)
 
             pea_points <- cim_facilities %>%
               dplyr::filter(!is.na(.data$longitude), !is.na(.data$latitude)) %>%
@@ -945,13 +946,13 @@ if (!is.null(facility_raw)) {
                 tidyr::pivot_wider(names_from = .data$technology, values_from = .data$value, values_fill = 0) %>%
                 dplyr::mutate(abbr = .data$state) %>%
                 dplyr::left_join(states, by = c("abbr" = "abbr")) %>%
-                dplyr::select(
-                  .data$economic_area,
-                  state,
-                  .data$abbr,
-                  .data$battery_manufacturing,
-                  .data$solar_manufacturing,
-                  .data$ev_manufacturing
+                dplyr::transmute(
+                  economic_area = .data$economic_area,
+                  state = dplyr::coalesce(.data$state.y, .data$state.x),
+                  abbr = .data$abbr,
+                  battery_manufacturing = .data$battery_manufacturing,
+                  solar_manufacturing = .data$solar_manufacturing,
+                  ev_manufacturing = .data$ev_manufacturing
                 )
             }
           }
