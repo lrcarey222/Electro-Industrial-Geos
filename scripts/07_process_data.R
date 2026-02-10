@@ -850,6 +850,7 @@ semiconductor_manufacturing <- ensure_optional_numeric(semiconductor_manufacturi
 
 cluster_manufacturing <- NULL
 cluster_pea_manufacturing <- NULL
+cluster_pea_clean_electric_capacity_growth <- NULL
 
 facility_path <- fs::path(raw_dir, "clean_investment_monitor_q2_2025", "manufacturing_facility_metadata.csv")
 facility_raw <- read_optional_csv_skip(facility_path, skip = 4)
@@ -1448,6 +1449,59 @@ if (is.null(cluster_pea_inputs) || nrow(cluster_pea_inputs) == 0) {
       }
     }
   }
+}
+
+if (!is.null(elec_fac) && nrow(elec_fac) > 0 && requireNamespace("sf", quietly = TRUE)) {
+  pea_shapefile <- fs::path(raw_dir, "FCC_PEAs_website.shp")
+  if (!fs::file_exists(pea_shapefile)) {
+    pea_shapefile <- fs::path(raw_dir, "FCC_PEAs_Website", "FCC_PEAs_website.shp")
+  }
+
+  if (fs::file_exists(pea_shapefile)) {
+    pea_sf <- tryCatch(
+      suppressWarnings(sf::st_read(pea_shapefile, quiet = TRUE)),
+      error = function(e) NULL
+    )
+
+    if (!is.null(pea_sf) && nrow(pea_sf) > 0) {
+      pea_names <- names(pea_sf)
+      pea_name_col <- intersect(c("PEA_Name", "PEA_NAME", "fcc_pea_name", "pea_name", "name"), pea_names)[1]
+
+      if (!is.na(pea_name_col)) {
+        if (any(!sf::st_is_valid(pea_sf))) {
+          pea_sf <- sf::st_make_valid(pea_sf)
+        }
+
+        pea_sf <- pea_sf %>%
+          sf::st_transform(4326) %>%
+          dplyr::mutate(economic_area = as.character(.data[[pea_name_col]])) %>%
+          dplyr::select(.data$economic_area)
+
+        pea_points <- elec_fac %>%
+          dplyr::filter(!is.na(.data$Longitude), !is.na(.data$Latitude)) %>%
+          sf::st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326, remove = FALSE)
+
+        if (nrow(pea_points) > 0) {
+          cluster_pea_clean_electric_capacity_growth <- pea_points %>%
+            sf::st_join(pea_sf, join = sf::st_intersects, left = FALSE) %>%
+            sf::st_drop_geometry() %>%
+            dplyr::filter(!is.na(.data$economic_area), !is.na(.data$state_abbr)) %>%
+            dplyr::group_by(.data$economic_area, .data$state_abbr) %>%
+            dplyr::summarize(clean_electric_capacity_growth_pea = sum(.data$size, na.rm = TRUE), .groups = "drop") %>%
+            dplyr::rename(abbr = .data$state_abbr)
+        }
+      }
+    }
+  }
+}
+
+if (!is.null(cluster_pea_clean_electric_capacity_growth) && nrow(cluster_pea_clean_electric_capacity_growth) > 0) {
+  cluster_pea_inputs <- cluster_pea_inputs %>%
+    dplyr::left_join(cluster_pea_clean_electric_capacity_growth, by = c("economic_area", "abbr")) %>%
+    dplyr::mutate(
+      clean_electric_capacity_growth = dplyr::coalesce(.data$clean_electric_capacity_growth_pea, .data$clean_electric_capacity_growth)
+    ) %>%
+    dplyr::select(-.data$clean_electric_capacity_growth_pea)
 }
 
 if (!is.null(cluster_pea_manufacturing) && nrow(cluster_pea_manufacturing) > 0) {
