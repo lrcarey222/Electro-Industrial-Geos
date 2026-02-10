@@ -6,6 +6,7 @@ CPCN_Requirements_and_Enactment_Years_by_State_GPT.csv,local,data/raw/CPCN_Requi
 Regdata_subnational.csv,local,data/raw/Regdata_subnational.csv,TRUE
 Solar Ordinances.csv,local,data/raw/Solar Ordinances.csv,TRUE
 state_sepa.csv,local,data/raw/state_sepa.csv,TRUE
+50 State Gap Analysis.xlsx,local,data/raw/50 State Gap Analysis.xlsx,TRUE
 cnbc_bus_rankings.csv,local,data/raw/cnbc_bus_rankings.csv,TRUE
 BNEF/2025-08-08 - Global Data Center Live IT Capacity Database.xlsx,local,data/raw/BNEF/2025-08-08 - Global Data Center Live IT Capacity Database.xlsx,TRUE
 clean_investment_monitor_q2_2025/quarterly_actual_investment.csv,local,data/raw/clean_investment_monitor_q2_2025/quarterly_actual_investment.csv,TRUE
@@ -21,3 +22,4 @@ afdc_station_counts,remote,data/raw/remote/historical-station-counts.xlsx,TRUE
 lbnl_interconnection,remote,data/raw/remote/LBNL_Ix_Queue_Data_File_thru2024_v2.xlsx,TRUE
 eia_sales_revenue,remote,data/raw/remote/sales_revenue.xlsx,TRUE
 afdc_ev_registrations,remote,data/raw/remote/10962-ev-registration-counts-by-state_9-06-24.xlsx,TRUE
+eia_generator_capacity,remote,data/raw/remote/december_generator2025.xlsx,TRUE
