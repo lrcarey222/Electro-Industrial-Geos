@@ -855,6 +855,12 @@ facility_path <- fs::path(raw_dir, "clean_investment_monitor_q2_2025", "manufact
 facility_raw <- read_optional_csv_skip(facility_path, skip = 4)
 if (!is.null(facility_raw)) {
   facility_raw <- facility_raw %>% janitor::clean_names()
+  if (!("latitude" %in% names(facility_raw))) {
+    facility_raw$latitude <- NA_real_
+  }
+  if (!("longitude" %in% names(facility_raw))) {
+    facility_raw$longitude <- NA_real_
+  }
   required_facility <- c(
     "segment", "technology", "state", "announcement_date", "investment_reported_flag",
     "estimated_total_facility_capex", "investment_status", "county_2020_geoid"
@@ -882,7 +888,9 @@ if (!is.null(facility_raw)) {
         ),
         capex = readr::parse_number(as.character(.data$estimated_total_facility_capex)),
         state = stringr::str_trim(as.character(.data$state)),
-        county_2020_geoid = readr::parse_number(as.character(.data$county_2020_geoid))
+        county_2020_geoid = readr::parse_number(as.character(.data$county_2020_geoid)),
+        latitude = readr::parse_number(as.character(.data$latitude)),
+        longitude = readr::parse_number(as.character(.data$longitude))
       ) %>%
       dplyr::filter(!is.na(.data$date), .data$date > as.Date("2022-01-01"), .data$investment_reported)
 
@@ -913,35 +921,39 @@ if (!is.null(facility_raw)) {
         if (!is.null(pea_sf) && nrow(pea_sf) > 0) {
           pea_names <- names(pea_sf)
           pea_name_col <- intersect(c("PEA_Name", "PEA_NAME", "fcc_pea_name", "pea_name", "name"), pea_names)[1]
-          county_col <- intersect(c("COUNTYFP20", "COUNTYFP", "countyfp20", "countyfp", "county_fips"), pea_names)[1]
-          state_col <- intersect(c("STATEFP20", "STATEFP", "statefp20", "statefp", "state_fips"), pea_names)[1]
 
-          if (!is.na(pea_name_col) && !is.na(county_col) && !is.na(state_col)) {
-            pea_lookup <- pea_sf %>%
-              sf::st_drop_geometry() %>%
-              dplyr::transmute(
-                county_2020_geoid = readr::parse_number(paste0(as.character(.data[[state_col]]), as.character(.data[[county_col]]))),
-                economic_area = as.character(.data[[pea_name_col]])
-              ) %>%
-              dplyr::filter(!is.na(.data$county_2020_geoid), !is.na(.data$economic_area)) %>%
-              dplyr::distinct()
+          if (!is.na(pea_name_col)) {
+            if (any(!sf::st_is_valid(pea_sf))) {
+              pea_sf <- sf::st_make_valid(pea_sf)
+            }
 
-            cluster_pea_manufacturing <- cim_facilities %>%
-              dplyr::left_join(pea_lookup, by = "county_2020_geoid") %>%
-              dplyr::filter(!is.na(.data$economic_area)) %>%
-              dplyr::group_by(.data$economic_area, .data$technology, .data$state) %>%
-              dplyr::summarize(value = sum(.data$capex, na.rm = TRUE), .groups = "drop") %>%
-              tidyr::pivot_wider(names_from = .data$technology, values_from = .data$value, values_fill = 0) %>%
-              dplyr::mutate(abbr = .data$state) %>%
-              dplyr::left_join(states, by = c("abbr" = "abbr")) %>%
-              dplyr::select(
-                .data$economic_area,
-                state,
-                .data$abbr,
-                .data$battery_manufacturing,
-                .data$solar_manufacturing,
-                .data$ev_manufacturing
-              )
+            pea_sf <- pea_sf %>%
+              sf::st_transform(4326) %>%
+              dplyr::transmute(economic_area = as.character(.data[[pea_name_col]]))
+
+            pea_points <- cim_facilities %>%
+              dplyr::filter(!is.na(.data$longitude), !is.na(.data$latitude)) %>%
+              sf::st_as_sf(coords = c("longitude", "latitude"), crs = 4326, remove = FALSE)
+
+            if (nrow(pea_points) > 0) {
+              cluster_pea_manufacturing <- pea_points %>%
+                sf::st_join(pea_sf, join = sf::st_intersects, left = FALSE) %>%
+                sf::st_drop_geometry() %>%
+                dplyr::filter(!is.na(.data$economic_area)) %>%
+                dplyr::group_by(.data$economic_area, .data$technology, .data$state) %>%
+                dplyr::summarize(value = sum(.data$capex, na.rm = TRUE), .groups = "drop") %>%
+                tidyr::pivot_wider(names_from = .data$technology, values_from = .data$value, values_fill = 0) %>%
+                dplyr::mutate(abbr = .data$state) %>%
+                dplyr::left_join(states, by = c("abbr" = "abbr")) %>%
+                dplyr::select(
+                  .data$economic_area,
+                  state,
+                  .data$abbr,
+                  .data$battery_manufacturing,
+                  .data$solar_manufacturing,
+                  .data$ev_manufacturing
+                )
+            }
           }
         }
       }
