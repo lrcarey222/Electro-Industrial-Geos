@@ -1119,12 +1119,12 @@ if (requireNamespace("blsQCEW", quietly = TRUE) && requireNamespace("tidycensus"
 
   fetch_county_qtr <- function(area_code, y, q) {
     y_try <- c(as.character(y), as.integer(y))
-    q_try <- unique(c(as.character(q), paste0("q", as.character(q))))
+    q_try <- unique(c(as.character(q), paste0("Q", as.character(q)), paste0("q", as.character(q))))
 
     for (yy in y_try) {
       for (qq in q_try) {
         out <- tryCatch(
-          blsQCEW::blsQCEW("Area", year = yy, quarter = qq, area = area_code),
+          blsQCEW::blsQCEW("Area", year = yy, qtr = qq, area = area_code),
           error = function(e) NULL
         )
         if (!is.null(out) && nrow(out) > 0) {
