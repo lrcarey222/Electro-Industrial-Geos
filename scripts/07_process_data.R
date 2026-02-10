@@ -849,36 +849,151 @@ semiconductor_manufacturing <- ensure_optional_numeric(semiconductor_manufacturi
 
 
 cluster_manufacturing <- NULL
-quarterly_path <- fs::path(raw_dir, "clean_investment_monitor_q2_2025", "quarterly_actual_investment.csv")
-quarterly_actual <- read_optional_csv_skip(quarterly_path, skip = 5)
-if (!is.null(quarterly_actual)) {
-  quarterly_actual <- quarterly_actual %>% janitor::clean_names()
-  required_quarterly <- c("segment", "state", "technology", "estimated_actual_quarterly_expenditure")
-  if (all(required_quarterly %in% names(quarterly_actual))) {
-    cluster_manufacturing <- quarterly_actual %>%
+cluster_pea_manufacturing <- NULL
+
+facility_path <- fs::path(raw_dir, "clean_investment_monitor_q2_2025", "manufacturing_facility_metadata.csv")
+facility_raw <- read_optional_csv_skip(facility_path, skip = 4)
+if (!is.null(facility_raw)) {
+  facility_raw <- facility_raw %>% janitor::clean_names()
+  if (!("latitude" %in% names(facility_raw))) {
+    facility_raw$latitude <- NA_real_
+  }
+  if (!("longitude" %in% names(facility_raw))) {
+    facility_raw$longitude <- NA_real_
+  }
+  required_facility <- c(
+    "segment", "technology", "state", "announcement_date", "investment_reported_flag",
+    "estimated_total_facility_capex", "investment_status", "county_2020_geoid"
+  )
+
+  if (all(required_facility %in% names(facility_raw))) {
+    cim_facilities <- facility_raw %>%
       dplyr::filter(
+        .data$technology %in% c("Batteries", "Solar", "Zero Emission Vehicles"),
         .data$segment == "Manufacturing",
-        .data$technology %in% c("Batteries", "Solar", "Zero Emission Vehicles")
+        .data$investment_status != "C"
       ) %>%
       dplyr::mutate(
+        announcement_date = dplyr::na_if(stringr::str_trim(as.character(.data$announcement_date)), ""),
+        date = lubridate::parse_date_time(.data$announcement_date, orders = c("mdy", "ymd"), quiet = TRUE) %>% as.Date(),
         technology = dplyr::case_when(
           .data$technology == "Batteries" ~ "battery_manufacturing",
           .data$technology == "Solar" ~ "solar_manufacturing",
           .data$technology == "Zero Emission Vehicles" ~ "ev_manufacturing",
           TRUE ~ NA_character_
         ),
-        value = readr::parse_number(as.character(.data$estimated_actual_quarterly_expenditure))
+        investment_reported = dplyr::case_when(
+          is.logical(.data$investment_reported_flag) ~ .data$investment_reported_flag,
+          TRUE ~ stringr::str_to_lower(as.character(.data$investment_reported_flag)) %in% c("true", "t", "1", "yes", "y")
+        ),
+        capex = readr::parse_number(as.character(.data$estimated_total_facility_capex)),
+        state = stringr::str_trim(as.character(.data$state)),
+        county_2020_geoid = readr::parse_number(as.character(.data$county_2020_geoid)),
+        latitude = readr::parse_number(as.character(.data$latitude)),
+        longitude = readr::parse_number(as.character(.data$longitude))
       ) %>%
+      dplyr::filter(!is.na(.data$date), .data$date > as.Date("2022-01-01"), .data$investment_reported)
+
+    cluster_manufacturing <- cim_facilities %>%
       dplyr::group_by(.data$state, .data$technology) %>%
-      dplyr::summarize(value = sum(.data$value, na.rm = TRUE), .groups = "drop") %>%
+      dplyr::summarize(value = sum(.data$capex, na.rm = TRUE), .groups = "drop") %>%
       tidyr::pivot_wider(names_from = .data$technology, values_from = .data$value, values_fill = 0) %>%
       dplyr::left_join(states, by = c("state" = "abbr")) %>%
       dplyr::transmute(
-        state = dplyr::coalesce(.data$state),
+        state = dplyr::coalesce(.data$state.y, .data$state.x),
         battery_manufacturing = .data$battery_manufacturing,
         solar_manufacturing = .data$solar_manufacturing,
         ev_manufacturing = .data$ev_manufacturing
       )
+
+    if (requireNamespace("sf", quietly = TRUE)) {
+      pea_shapefile <- fs::path(raw_dir, "FCC_PEAs_website.shp")
+      if (!fs::file_exists(pea_shapefile)) {
+        pea_shapefile <- fs::path(raw_dir, "FCC_PEAs_Website", "FCC_PEAs_website.shp")
+      }
+
+      if (fs::file_exists(pea_shapefile)) {
+        pea_sf <- tryCatch(
+          suppressWarnings(sf::st_read(pea_shapefile, quiet = TRUE)),
+          error = function(e) NULL
+        )
+
+        if (!is.null(pea_sf) && nrow(pea_sf) > 0) {
+          pea_names <- names(pea_sf)
+          pea_name_col <- intersect(c("PEA_Name", "PEA_NAME", "fcc_pea_name", "pea_name", "name"), pea_names)[1]
+
+          if (!is.na(pea_name_col)) {
+            if (any(!sf::st_is_valid(pea_sf))) {
+              pea_sf <- sf::st_make_valid(pea_sf)
+            }
+
+            pea_sf <- pea_sf %>%
+              sf::st_transform(4326) %>%
+              dplyr::mutate(economic_area = as.character(.data[[pea_name_col]])) %>%
+              dplyr::select(.data$economic_area)
+
+            pea_points <- cim_facilities %>%
+              dplyr::filter(!is.na(.data$longitude), !is.na(.data$latitude)) %>%
+              sf::st_as_sf(coords = c("longitude", "latitude"), crs = 4326, remove = FALSE)
+
+            if (nrow(pea_points) > 0) {
+              cluster_pea_manufacturing <- pea_points %>%
+                sf::st_join(pea_sf, join = sf::st_intersects, left = FALSE) %>%
+                sf::st_drop_geometry() %>%
+                dplyr::filter(!is.na(.data$economic_area)) %>%
+                dplyr::group_by(.data$economic_area, .data$technology, .data$state) %>%
+                dplyr::summarize(value = sum(.data$capex, na.rm = TRUE), .groups = "drop") %>%
+                tidyr::pivot_wider(names_from = .data$technology, values_from = .data$value, values_fill = 0) %>%
+                dplyr::mutate(abbr = .data$state) %>%
+                dplyr::left_join(states, by = c("abbr" = "abbr")) %>%
+                dplyr::transmute(
+                  economic_area = .data$economic_area,
+                  state = dplyr::coalesce(.data$state.y, .data$state.x),
+                  abbr = .data$abbr,
+                  battery_manufacturing = .data$battery_manufacturing,
+                  solar_manufacturing = .data$solar_manufacturing,
+                  ev_manufacturing = .data$ev_manufacturing
+                )
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+if (is.null(cluster_manufacturing)) {
+  quarterly_path <- fs::path(raw_dir, "clean_investment_monitor_q2_2025", "quarterly_actual_investment.csv")
+  quarterly_actual <- read_optional_csv_skip(quarterly_path, skip = 5)
+  if (!is.null(quarterly_actual)) {
+    quarterly_actual <- quarterly_actual %>% janitor::clean_names()
+    required_quarterly <- c("segment", "state", "technology", "estimated_actual_quarterly_expenditure")
+    if (all(required_quarterly %in% names(quarterly_actual))) {
+      cluster_manufacturing <- quarterly_actual %>%
+        dplyr::filter(
+          .data$segment == "Manufacturing",
+          .data$technology %in% c("Batteries", "Solar", "Zero Emission Vehicles")
+        ) %>%
+        dplyr::mutate(
+          technology = dplyr::case_when(
+            .data$technology == "Batteries" ~ "battery_manufacturing",
+            .data$technology == "Solar" ~ "solar_manufacturing",
+            .data$technology == "Zero Emission Vehicles" ~ "ev_manufacturing",
+            TRUE ~ NA_character_
+          ),
+          value = readr::parse_number(as.character(.data$estimated_actual_quarterly_expenditure))
+        ) %>%
+        dplyr::group_by(.data$state, .data$technology) %>%
+        dplyr::summarize(value = sum(.data$value, na.rm = TRUE), .groups = "drop") %>%
+        tidyr::pivot_wider(names_from = .data$technology, values_from = .data$value, values_fill = 0) %>%
+        dplyr::left_join(states, by = c("state" = "abbr")) %>%
+        dplyr::transmute(
+          state = dplyr::coalesce(.data$state.y, .data$state.x),
+          battery_manufacturing = .data$battery_manufacturing,
+          solar_manufacturing = .data$solar_manufacturing,
+          ev_manufacturing = .data$ev_manufacturing
+        )
+    }
   }
 }
 
@@ -1333,6 +1448,25 @@ if (is.null(cluster_pea_inputs) || nrow(cluster_pea_inputs) == 0) {
       }
     }
   }
+}
+
+if (!is.null(cluster_pea_manufacturing) && nrow(cluster_pea_manufacturing) > 0) {
+  cluster_pea_inputs <- cluster_pea_inputs %>%
+    dplyr::left_join(
+      cluster_pea_manufacturing %>%
+        dplyr::rename(
+          battery_manufacturing_cim = .data$battery_manufacturing,
+          solar_manufacturing_cim = .data$solar_manufacturing,
+          ev_manufacturing_cim = .data$ev_manufacturing
+        ),
+      by = c("economic_area", "abbr")
+    ) %>%
+    dplyr::mutate(
+      battery_manufacturing = dplyr::coalesce(.data$battery_manufacturing_cim, .data$battery_manufacturing),
+      solar_manufacturing = dplyr::coalesce(.data$solar_manufacturing_cim, .data$solar_manufacturing),
+      ev_manufacturing = dplyr::coalesce(.data$ev_manufacturing_cim, .data$ev_manufacturing)
+    ) %>%
+    dplyr::select(-dplyr::ends_with("_cim"))
 }
 
 # ---- Output --------------------------------------------------------------
