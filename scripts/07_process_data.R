@@ -156,6 +156,49 @@ load_quarterly_gdp_growth <- function(raw_dir, states) {
     dplyr::transmute(state = .data$geo_name, gdp_growth_index)
 }
 
+
+#Population
+
+
+  pea_shapefile <- fs::path(raw_dir, "FCC_PEAs_Website", "FCC_PEAs_website.shp")
+
+  pea_sf <- tryCatch(
+    suppressWarnings(sf::st_read(pea_shapefile, quiet = TRUE)),
+    error = function(e) NULL
+  )
+  
+
+    pea_names <- names(pea_sf)
+    pea_name_col <- intersect(c("PEA_Name", "PEA_NAME", "fcc_pea_name", "pea_name", "name"), pea_names)[1]
+    
+
+    pea_sf <- sf::st_make_valid(pea_sf)
+    
+    pea_sf <- pea_sf %>%
+      sf::st_transform(4326) %>%
+      dplyr::mutate(economic_area = as.character(PEA_Name)) 
+      
+      
+county_pop <- readr::read_csv('https://www2.census.gov/programs-surveys/popest/datasets/2020-2023/counties/totals/co-est2023-alldata.csv')
+
+pea_county_path <- fs::path(raw_dir, "FCC_PEA_website.xlsx")
+pea_counties <- read_excel(pea_county_path,3)
+
+pea_pop <- pea_counties %>%
+  left_join(
+    county_pop %>%
+      mutate(FIPS = paste0(STATE, COUNTY)) %>%
+      select(FIPS, POPESTIMATE2023),
+    by = "FIPS"
+  ) %>%
+  left_join(
+    pea_sf  %>% sf::st_drop_geometry() %>% select(PEA_Num, PEA_Name),
+    by = c("FCC_PEA_Number" = "PEA_Num")
+  ) %>%
+  group_by(PEA_Name) %>%
+  summarize(pop=sum(POPESTIMATE2023,na.rm=T))
+
+
 # ---- Base Inputs ---------------------------------------------------------
 base_inputs <- if (isTRUE(paths$use_sample_data)) {
   load_sample_inputs(paths)
@@ -872,7 +915,7 @@ if (!is.null(facility_raw)) {
       dplyr::filter(
         .data$technology %in% c("Batteries", "Solar", "Zero Emission Vehicles"),
         .data$segment == "Manufacturing",
-        .data$investment_status != "C"
+        .data$current_facility_status != "C"
       ) %>%
       dplyr::mutate(
         announcement_date = dplyr::na_if(stringr::str_trim(as.character(.data$announcement_date)), ""),
@@ -883,17 +926,13 @@ if (!is.null(facility_raw)) {
           .data$technology == "Zero Emission Vehicles" ~ "ev_manufacturing",
           TRUE ~ NA_character_
         ),
-        investment_reported = dplyr::case_when(
-          is.logical(.data$investment_reported_flag) ~ .data$investment_reported_flag,
-          TRUE ~ stringr::str_to_lower(as.character(.data$investment_reported_flag)) %in% c("true", "t", "1", "yes", "y")
-        ),
         capex = readr::parse_number(as.character(.data$estimated_total_facility_capex)),
         state = stringr::str_trim(as.character(.data$state)),
         county_2020_geoid = readr::parse_number(as.character(.data$county_2020_geoid)),
         latitude = readr::parse_number(as.character(.data$latitude)),
         longitude = readr::parse_number(as.character(.data$longitude))
       ) %>%
-      dplyr::filter(!is.na(.data$date), .data$date > as.Date("2022-01-01"), .data$investment_reported)
+      dplyr::filter(!is.na(.data$date), .data$date > as.Date("2022-01-01"))
 
     cluster_manufacturing <- cim_facilities %>%
       dplyr::group_by(.data$state, .data$technology) %>%
@@ -901,39 +940,13 @@ if (!is.null(facility_raw)) {
       tidyr::pivot_wider(names_from = .data$technology, values_from = .data$value, values_fill = 0) %>%
       dplyr::left_join(states, by = c("state" = "abbr")) %>%
       dplyr::transmute(
-        state = dplyr::coalesce(.data$state.y, .data$state.x),
+        state = dplyr::coalesce(.data$state.y, .data$state),
         battery_manufacturing = .data$battery_manufacturing,
         solar_manufacturing = .data$solar_manufacturing,
         ev_manufacturing = .data$ev_manufacturing
       )
 
-    if (requireNamespace("sf", quietly = TRUE)) {
-      pea_shapefile <- fs::path(raw_dir, "FCC_PEAs_website.shp")
-      if (!fs::file_exists(pea_shapefile)) {
-        pea_shapefile <- fs::path(raw_dir, "FCC_PEAs_Website", "FCC_PEAs_website.shp")
-      }
-
-      if (fs::file_exists(pea_shapefile)) {
-        pea_sf <- tryCatch(
-          suppressWarnings(sf::st_read(pea_shapefile, quiet = TRUE)),
-          error = function(e) NULL
-        )
-
-        if (!is.null(pea_sf) && nrow(pea_sf) > 0) {
-          pea_names <- names(pea_sf)
-          pea_name_col <- intersect(c("PEA_Name", "PEA_NAME", "fcc_pea_name", "pea_name", "name"), pea_names)[1]
-
-          if (!is.na(pea_name_col)) {
-            if (any(!sf::st_is_valid(pea_sf))) {
-              pea_sf <- sf::st_make_valid(pea_sf)
-            }
-
-            pea_sf <- pea_sf %>%
-              sf::st_transform(4326) %>%
-              dplyr::mutate(economic_area = as.character(.data[[pea_name_col]])) %>%
-              dplyr::select(.data$economic_area)
-
-            pea_points <- cim_facilities %>%
+      pea_points <- cim_facilities %>%
               dplyr::filter(!is.na(.data$longitude), !is.na(.data$latitude)) %>%
               sf::st_as_sf(coords = c("longitude", "latitude"), crs = 4326, remove = FALSE)
 
@@ -959,9 +972,7 @@ if (!is.null(facility_raw)) {
           }
         }
       }
-    }
-  }
-}
+    
 
 if (is.null(cluster_manufacturing)) {
   quarterly_path <- fs::path(raw_dir, "clean_investment_monitor_q2_2025", "quarterly_actual_investment.csv")
@@ -1078,7 +1089,20 @@ if (is.null(drones_fac)) {
   drones_fac <- tibble::tibble(name = character(), tech = character(), cat = character(), size = numeric(), Latitude = numeric(), Longitude = numeric(), state_abbr = character(), unit = character())
 }
 
-electrotech_fac <- dplyr::bind_rows(datacenter_fac, semi_fac, elec_fac, drones_fac) %>%
+cim_fac <- cim_facilities%>%
+  dplyr::transmute(
+    name = .data$company,
+    cat = .data$technology,
+    tech = .data$subcategory,
+    size = readr::parse_number(as.character(.data$estimated_total_facility_capex)),
+    Latitude = readr::parse_number(as.character(.data$latitude)),
+    Longitude = readr::parse_number(as.character(.data$longitude)),
+    state_abbr = .data$state,
+    unit = "USD"
+  )
+
+
+electrotech_fac <- dplyr::bind_rows(datacenter_fac, semi_fac, elec_fac, drones_fac,cim_fac) %>%
   dplyr::filter(!is.na(.data$cat), !is.na(.data$size)) %>%
   dplyr::group_by(.data$cat) %>%
   dplyr::mutate(
@@ -1110,15 +1134,27 @@ if (nrow(electrotech_fac) > 0) {
     dplyr::filter(!is.na(.data$economic_area), !is.na(.data$state_abbr)) %>%
     dplyr::group_by(.data$economic_area, .data$cat, .data$unit) %>%
     dplyr::summarize(size = sum(.data$size, na.rm = TRUE), .groups = "drop") %>%
-    tidyr::pivot_wider(names_from = .data$cat, values_from = .data$size) %>%
+    left_join(pea_pop,by=c("economic_area"="PEA_Name")) %>%
+    ungroup() %>%
+    dplyr::mutate(size_pop=size/pop) %>%
+    dplyr::group_by(.data$cat) %>%
+    dplyr::mutate(
+      size_perc = scale_minmax(.data$size_pop),
+      size_perc_scurve = median_scurve(.data$size_pop)
+    ) %>%
+    dplyr::ungroup() %>%
+    select(.data$economic_area,.data$cat,.data$size_perc_scurve) %>%
+    tidyr::pivot_wider(names_from = .data$cat, values_from = .data$size_perc_scurve) %>%
     rowwise() %>%
     dplyr::mutate(
-      total = sum(dplyr::c_across(`Datacenter`:`Semiconductor Manufacturing`), na.rm = TRUE)
+      total = sum(dplyr::c_across(`Datacenter`:`ev_manufacturing`), na.rm = TRUE)
     ) %>%
     dplyr::ungroup()
   
   readr::write_csv(pea_electro, fs::path(paths$processed_dir, "pea_electro.csv"))
-  readr::write_csv(pea_electro , fs::path(paths$processed_dir, "pea_electro.csv"))
+  readr::write_csv(pea_electro %>%
+                     arrange(desc(total)) %>%
+                     slice_max(n=15,order_by=total), fs::path(paths$processed_dir, "pea_electro_top.csv"))
 }
 
 # ---- County employment (legacy wiring, state-level rollup) --------------
