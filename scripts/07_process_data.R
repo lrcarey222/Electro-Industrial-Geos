@@ -1100,6 +1100,27 @@ if (nrow(electrotech_fac) > 0) {
   readr::write_csv(state_electro, fs::path(paths$processed_dir, "state_electro.csv"))
 }
 
+
+if (nrow(electrotech_fac) > 0) {
+  pea_electro <- electrotech_fac %>%
+    dplyr::filter(!is.na(.data$Latitude), !is.na(.data$Longitude)) %>%
+    sf::st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326, remove = FALSE) %>%
+    sf::st_join(pea_sf, join = sf::st_intersects, left = FALSE) %>%
+    sf::st_drop_geometry() %>%
+    dplyr::filter(!is.na(.data$economic_area), !is.na(.data$state_abbr)) %>%
+    dplyr::group_by(.data$economic_area, .data$cat, .data$unit) %>%
+    dplyr::summarize(size = sum(.data$size, na.rm = TRUE), .groups = "drop") %>%
+    tidyr::pivot_wider(names_from = .data$cat, values_from = .data$size) %>%
+    rowwise() %>%
+    dplyr::mutate(
+      total = sum(dplyr::c_across(`Datacenter`:`Semiconductor Manufacturing`), na.rm = TRUE)
+    ) %>%
+    dplyr::ungroup()
+  
+  readr::write_csv(pea_electro, fs::path(paths$processed_dir, "pea_electro.csv"))
+  readr::write_csv(pea_electro , fs::path(paths$processed_dir, "pea_electro.csv"))
+}
+
 # ---- County employment (legacy wiring, state-level rollup) --------------
 workforce_share_update <- NULL
 workforce_growth_update <- NULL
@@ -1350,7 +1371,7 @@ if (is.null(cluster_pea_inputs) || nrow(cluster_pea_inputs) == 0) {
       ev_manufacturing
     )
 
-  pea_shapefile <- fs::path(raw_dir, "FCC_PEAs_website.shp")
+  pea_shapefile <- fs::path(raw_dir, "FCC_PEAs_Website", "FCC_PEAs_website.shp")
   pea_sidecars <- c(
     pea_shapefile,
     fs::path_ext_set(pea_shapefile, "dbf"),
@@ -1445,7 +1466,6 @@ if (is.null(cluster_pea_inputs) || nrow(cluster_pea_inputs) == 0) {
   }
 }
 
-    pea_shapefile <- fs::path(raw_dir, "FCC_PEAs_Website", "FCC_PEAs_website.shp")
   
 
   
