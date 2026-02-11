@@ -1018,52 +1018,44 @@ if (is.null(cluster_manufacturing)) {
   )
 }
 
-#Monthly Industrial Electricity Prices---------------
-url <- "https://www.eia.gov/electricity/data/eia861m/xls/sales_revenue.xlsx"
-destination_folder <- "OneDrive - RMI/Documents - US Program/6_Projects/Clean Regional Economic Development/ACRE/Data/States Data/"
-file_path <- file.path(destination_folder, "eia_sales.xlsx")
+# ---- Raw source pulls used for downstream state rollups -----------------
+# Pull the latest EIA monthly sales file via cache (if needed), then compute a
+# current-year state table used in final joins.
+eia_sales <- load_remote_eia_sales(paths, raw_dir)
+industrial_electricity_price <- tibble::tibble(State = character(), ind_price_m = numeric())
+if (!is.null(eia_sales)) {
+  eia_sales <- janitor::clean_names(eia_sales)
+  price_col <- intersect(names(eia_sales), names(eia_sales)[stringr::str_detect(names(eia_sales), "cents.*k_wh")])[1]
+  if (!is.na(price_col)) {
+    ind_price_m <- eia_sales %>%
+      dplyr::mutate(ind_price_m = .data[[price_col]]) %>%
+      dplyr::select(.data$state, .data$year, .data$month, .data$ind_price_m)
 
-dir.create(destination_folder, recursive = TRUE, showWarnings = FALSE)
+    ind_price_a <- ind_price_m %>%
+      dplyr::group_by(.data$state, .data$year) %>%
+      dplyr::summarize(ind_price_m = mean(.data$ind_price_m, na.rm = TRUE), .groups = "drop")
 
-download.file(url, destfile = file_path, mode = "wb")
-
-#EIA Sales
-eia_sales <- read_excel(file_path, sheet = 1,skip=2)
-
-#State Totals Industrial Prices
-ind_price_m <- eia_sales %>%
-  mutate(ind_price_m=`Cents/kWh...16`) %>%
-  select(State,Year,Month,ind_price_m)
-
-ind_price_a<-ind_price_m %>%
-  group_by(State,Year) %>%
-  summarize(across(c(ind_price_m),mean,na.rm=T))
-
-this_year <- as.integer(format(Sys.Date(), "%Y"))
-
-industrial_electricity_price <- ind_price_a %>%
-  dplyr::filter(Year %in% c(this_year, this_year - 1)) %>%
-  dplyr::arrange(dplyr::desc(Year)) %>%
-  dplyr::group_by(State) %>%        # remove if you don't need per-State selection
-  dplyr::slice(1) %>%
-  dplyr::ungroup() %>%
-  select(-Year)
+    this_year <- as.integer(format(Sys.Date(), "%Y"))
+    industrial_electricity_price <- ind_price_a %>%
+      dplyr::filter(.data$year %in% c(this_year, this_year - 1)) %>%
+      dplyr::arrange(dplyr::desc(.data$year)) %>%
+      dplyr::group_by(.data$state) %>%
+      dplyr::slice(1) %>%
+      dplyr::ungroup() %>%
+      dplyr::transmute(State = .data$state, ind_price_m)
+  }
+}
 
 
 # ---- Electrotech facilities chart wiring ---------------------------------
-median_scurve <- function(x, gamma = 0.5) {
-  r <- dplyr::percent_rank(x)
-  (r^gamma) / (r^gamma + (1 - r)^gamma)
-}
-
 if (is.null(elec_fac)) {
-  elec_fac <- tibble::tibble(name = character(), tech = character(), cat = character(), size = numeric(), Latitude = numeric(), Longitude = numeric(), state_abbr = character(), unit = character())
+  elec_fac <- empty_facility_tbl()
 }
 if (is.null(datacenter_fac)) {
-  datacenter_fac <- tibble::tibble(name = character(), tech = character(), cat = character(), size = numeric(), Latitude = numeric(), Longitude = numeric(), state_abbr = character(), unit = character())
+  datacenter_fac <- empty_facility_tbl()
 }
 if (is.null(semi_fac)) {
-  semi_fac <- tibble::tibble(name = character(), tech = character(), cat = character(), size = numeric(), Latitude = numeric(), Longitude = numeric(), state_abbr = character(), unit = character())
+  semi_fac <- empty_facility_tbl()
 }
 
 drones_path <- fs::path(raw_dir, "us_drone_facility_announcements_2022_2025.csv")
@@ -1086,23 +1078,27 @@ if (!is.null(drones_raw)) {
     )
 }
 if (is.null(drones_fac)) {
-  drones_fac <- tibble::tibble(name = character(), tech = character(), cat = character(), size = numeric(), Latitude = numeric(), Longitude = numeric(), state_abbr = character(), unit = character())
+  drones_fac <- empty_facility_tbl()
 }
 
-cim_fac <- cim_facilities%>%
-  dplyr::transmute(
-    name = .data$company,
-    cat = .data$technology,
-    tech = .data$subcategory,
-    size = readr::parse_number(as.character(.data$estimated_total_facility_capex)),
-    Latitude = readr::parse_number(as.character(.data$latitude)),
-    Longitude = readr::parse_number(as.character(.data$longitude)),
-    state_abbr = .data$state,
-    unit = "USD"
-  )
+cim_fac <- empty_facility_tbl()
+if (!is.null(cim_facilities) && nrow(cim_facilities) > 0) {
+  cim_fac <- cim_facilities %>%
+    dplyr::transmute(
+      name = .data$company,
+      cat = .data$technology,
+      tech = .data$subcategory,
+      size = readr::parse_number(as.character(.data$estimated_total_facility_capex)),
+      Latitude = readr::parse_number(as.character(.data$latitude)),
+      Longitude = readr::parse_number(as.character(.data$longitude)),
+      state_abbr = .data$state,
+      unit = "USD"
+    )
+}
 
 
-electrotech_fac <- dplyr::bind_rows(datacenter_fac, semi_fac, elec_fac, drones_fac,cim_fac) %>%
+# Facility-level/point dataset used by map and downstream aggregations.
+electrotech_fac <- dplyr::bind_rows(datacenter_fac, semi_fac, elec_fac, drones_fac, cim_fac) %>%
   dplyr::filter(!is.na(.data$cat), !is.na(.data$size)) %>%
   dplyr::group_by(.data$cat) %>%
   dplyr::mutate(
@@ -1115,46 +1111,23 @@ electrotech_fac <- dplyr::bind_rows(datacenter_fac, semi_fac, elec_fac, drones_f
 if (nrow(electrotech_fac) > 0) {
   readr::write_csv(electrotech_fac, fs::path(paths$processed_dir, "electrotech_fac.csv"))
 
-  state_electro <- electrotech_fac %>%
-    dplyr::filter(!is.na(.data$state_abbr)) %>%
-    dplyr::group_by(.data$state_abbr, .data$cat, .data$unit) %>%
-    dplyr::summarize(size = sum(.data$size, na.rm = TRUE), .groups = "drop") %>%
-    tidyr::pivot_wider(names_from = .data$cat, values_from = .data$size)
-
+  # State aggregation for scorecards and statewide comparisons.
+  state_electro <- build_state_facility_rollup(electrotech_fac)
   readr::write_csv(state_electro, fs::path(paths$processed_dir, "state_electro.csv"))
 }
 
-
 if (nrow(electrotech_fac) > 0) {
-  pea_electro <- electrotech_fac %>%
-    dplyr::filter(!is.na(.data$Latitude), !is.na(.data$Longitude)) %>%
-    sf::st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326, remove = FALSE) %>%
-    sf::st_join(pea_sf, join = sf::st_intersects, left = FALSE) %>%
-    sf::st_drop_geometry() %>%
-    dplyr::filter(!is.na(.data$economic_area), !is.na(.data$state_abbr)) %>%
-    dplyr::group_by(.data$economic_area, .data$cat, .data$unit) %>%
-    dplyr::summarize(size = sum(.data$size, na.rm = TRUE), .groups = "drop") %>%
-    left_join(pea_pop,by=c("economic_area"="PEA_Name")) %>%
-    ungroup() %>%
-    dplyr::mutate(size_pop=size/pop) %>%
-    dplyr::group_by(.data$cat) %>%
-    dplyr::mutate(
-      size_perc = scale_minmax(.data$size_pop),
-      size_perc_scurve = median_scurve(.data$size_pop)
-    ) %>%
-    dplyr::ungroup() %>%
-    select(.data$economic_area,.data$cat,.data$size_perc_scurve) %>%
-    tidyr::pivot_wider(names_from = .data$cat, values_from = .data$size_perc_scurve) %>%
+  # PEA aggregation for regional cluster views.
+  pea_electro <- build_pea_facility_rollup(electrotech_fac, pea_sf, pea_pop) %>%
     rowwise() %>%
-    dplyr::mutate(
-      total = sum(dplyr::c_across(`Datacenter`:`ev_manufacturing`), na.rm = TRUE)
-    ) %>%
+    dplyr::mutate(total = sum(dplyr::c_across(`Datacenter`:`ev_manufacturing`), na.rm = TRUE)) %>%
     dplyr::ungroup()
-  
+
   readr::write_csv(pea_electro, fs::path(paths$processed_dir, "pea_electro.csv"))
-  readr::write_csv(pea_electro %>%
-                     arrange(desc(total)) %>%
-                     slice_max(n=15,order_by=total), fs::path(paths$processed_dir, "pea_electro_top.csv"))
+  readr::write_csv(
+    pea_electro %>% dplyr::arrange(dplyr::desc(.data$total)) %>% dplyr::slice_max(n = 15, order_by = .data$total),
+    fs::path(paths$processed_dir, "pea_electro_top.csv")
+  )
 }
 
 # ---- County employment (legacy wiring, state-level rollup) --------------
@@ -1543,6 +1516,17 @@ if (is.null(cluster_pea_inputs) || nrow(cluster_pea_inputs) == 0) {
     dplyr::select(-.data$clean_electric_capacity_growth_pea)
 
 
+if (is.null(cluster_pea_manufacturing)) {
+  cluster_pea_manufacturing <- tibble::tibble(
+    economic_area = character(),
+    state = character(),
+    abbr = character(),
+    battery_manufacturing = numeric(),
+    solar_manufacturing = numeric(),
+    ev_manufacturing = numeric()
+  )
+}
+
   cluster_pea_inputs <- cluster_pea_inputs %>%
     dplyr::left_join(
       cluster_pea_manufacturing %>%
@@ -1559,6 +1543,7 @@ if (is.null(cluster_pea_inputs) || nrow(cluster_pea_inputs) == 0) {
       ev_manufacturing = dplyr::coalesce(.data$ev_manufacturing_cim, .data$ev_manufacturing)
     ) %>%
     dplyr::select(-dplyr::ends_with("_cim"))
+
 
 
 # ---- Output --------------------------------------------------------------
