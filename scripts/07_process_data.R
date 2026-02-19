@@ -157,46 +157,51 @@ load_quarterly_gdp_growth <- function(raw_dir, states) {
 }
 
 
-#Population
+# ---- PEA shapefile + population ------------------------------------------
+pea_shapefile <- fs::path(raw_dir, "FCC_PEAs_Website", "FCC_PEAs_website.shp")
 
+pea_sf <- tryCatch(
+  suppressWarnings(sf::st_read(pea_shapefile, quiet = TRUE)),
+  error = function(e) NULL
+)
+pea_pop <- NULL
 
-  pea_shapefile <- fs::path(raw_dir, "FCC_PEAs_Website", "FCC_PEAs_website.shp")
+if (!is.null(pea_sf)) {
+  pea_names   <- names(pea_sf)
+  pea_name_col <- intersect(c("PEA_Name", "PEA_NAME", "fcc_pea_name", "pea_name", "name"), pea_names)[1]
 
-  pea_sf <- tryCatch(
-    suppressWarnings(sf::st_read(pea_shapefile, quiet = TRUE)),
+  pea_sf <- sf::st_make_valid(pea_sf)
+  pea_sf <- pea_sf %>%
+    sf::st_transform(4326) %>%
+    dplyr::mutate(economic_area = as.character(PEA_Name))
+
+  county_pop <- tryCatch(
+    readr::read_csv(
+      "https://www2.census.gov/programs-surveys/popest/datasets/2020-2023/counties/totals/co-est2023-alldata.csv",
+      show_col_types = FALSE
+    ),
     error = function(e) NULL
   )
-  
 
-    pea_names <- names(pea_sf)
-    pea_name_col <- intersect(c("PEA_Name", "PEA_NAME", "fcc_pea_name", "pea_name", "name"), pea_names)[1]
-    
+  pea_county_path <- fs::path(raw_dir, "FCC_PEA_website.xlsx")
+  pea_counties <- read_optional_xlsx(pea_county_path, sheet = 3, start_row = 1)
 
-    pea_sf <- sf::st_make_valid(pea_sf)
-    
-    pea_sf <- pea_sf %>%
-      sf::st_transform(4326) %>%
-      dplyr::mutate(economic_area = as.character(PEA_Name)) 
-      
-      
-county_pop <- readr::read_csv('https://www2.census.gov/programs-surveys/popest/datasets/2020-2023/counties/totals/co-est2023-alldata.csv')
-
-pea_county_path <- fs::path(raw_dir, "FCC_PEA_website.xlsx")
-pea_counties <- read_excel(pea_county_path,3)
-
-pea_pop <- pea_counties %>%
-  left_join(
-    county_pop %>%
-      mutate(FIPS = paste0(STATE, COUNTY)) %>%
-      select(FIPS, POPESTIMATE2023),
-    by = "FIPS"
-  ) %>%
-  left_join(
-    pea_sf  %>% sf::st_drop_geometry() %>% select(PEA_Num, PEA_Name),
-    by = c("FCC_PEA_Number" = "PEA_Num")
-  ) %>%
-  group_by(PEA_Name) %>%
-  summarize(pop=sum(POPESTIMATE2023,na.rm=T))
+  if (!is.null(county_pop) && !is.null(pea_counties)) {
+    pea_pop <- pea_counties %>%
+      dplyr::left_join(
+        county_pop %>%
+          dplyr::mutate(FIPS = paste0(.data$STATE, .data$COUNTY)) %>%
+          dplyr::select(.data$FIPS, .data$POPESTIMATE2023),
+        by = "FIPS"
+      ) %>%
+      dplyr::left_join(
+        pea_sf %>% sf::st_drop_geometry() %>% dplyr::select(PEA_Num, PEA_Name),
+        by = c("FCC_PEA_Number" = "PEA_Num")
+      ) %>%
+      dplyr::group_by(.data$PEA_Name) %>%
+      dplyr::summarize(pop = sum(.data$POPESTIMATE2023, na.rm = TRUE), .groups = "drop")
+  }
+}
 
 
 # ---- Base Inputs ---------------------------------------------------------
@@ -1116,7 +1121,7 @@ if (nrow(electrotech_fac) > 0) {
   readr::write_csv(state_electro, fs::path(paths$processed_dir, "state_electro.csv"))
 }
 
-if (nrow(electrotech_fac) > 0) {
+if (nrow(electrotech_fac) > 0 && !is.null(pea_sf) && !is.null(pea_pop)) {
   # PEA aggregation for regional cluster views.
   pea_electro <- build_pea_facility_rollup(electrotech_fac, pea_sf, pea_pop) %>%
     rowwise() %>%
@@ -1130,9 +1135,15 @@ if (nrow(electrotech_fac) > 0) {
   )
 }
 
-# ---- County employment (legacy wiring, state-level rollup) --------------
+# ---- County employment (BLS QCEW API) ------------------------------------
+# Pulls county-level QCEW data from the BLS public API and rolls up to
+# state-level workforce share and growth metrics. Skipped in sample-data mode
+# and when blsAPI is unavailable. Results are cached on disk by year/quarter
+# to avoid re-fetching the ~3,000-county dataset on every run.
 workforce_share_update <- NULL
 workforce_growth_update <- NULL
+
+if (!isTRUE(config$use_sample_data) && requireNamespace("blsAPI", quietly = TRUE)) {
 
   electric_man_6d <- c(
     "513322", "513340", "513390", "515210", "517210", "517211", "517212", "517410", "517910", "517919",
@@ -1158,36 +1169,63 @@ workforce_growth_update <- NULL
       error = function(e) NULL
     )
   }
-  
 
+  # Probe BLS for the most recently available quarter. Limited to 4 candidates
+  # to avoid burning through the 500 req/day public API quota.
   detect_latest_yq <- function(sample_area = "01001") {
-    candidates <- tidyr::expand_grid(year = 2025:2020, quarter = c("4", "3", "2", "1")) %>%
-      dplyr::arrange(dplyr::desc(.data$year), dplyr::desc(.data$quarter))
+    this_year <- as.integer(format(Sys.Date(), "%Y"))
+    candidates <- tidyr::expand_grid(
+      year    = this_year:(this_year - 1),
+      quarter = c("4", "3", "2", "1")
+    ) %>%
+      dplyr::arrange(dplyr::desc(.data$year), dplyr::desc(.data$quarter)) %>%
+      dplyr::slice_head(n = 4)
 
     for (i in seq_len(nrow(candidates))) {
       probe <- fetch_county_qtr(sample_area, candidates$year[i], candidates$quarter[i])
       if (!is.null(probe) && nrow(probe) > 0) {
-        return(list(year = as.character(candidates$year[i]), quarter = as.character(candidates$quarter[i])))
+        return(list(
+          year    = as.character(candidates$year[i]),
+          quarter = as.character(candidates$quarter[i])
+        ))
       }
     }
 
-    list(year = "2025", quarter = "3")
+    list(year = as.character(this_year - 1), quarter = "4")
   }
 
-  pull_qtr <- function(y, q) {
-    purrr::map_dfr(county_codes$area_code, function(ac) {
-      Sys.sleep(0.03)
+  # Pull all counties for a given year/quarter. Results are cached on disk so
+  # subsequent pipeline runs skip the API entirely for already-fetched periods.
+  # BLS public API allows 500 requests/day without a key; with ~3,200 counties
+  # a single full pull costs ~3,200 requests, so the 0.25 s sleep is the
+  # minimum safe rate.
+  pull_qtr_cached <- function(y, q, cache_dir) {
+    cache_path <- fs::path(cache_dir, paste0("bls_qcew_", y, "q", q, ".rds"))
+    if (fs::file_exists(cache_path)) {
+      return(readRDS(cache_path))
+    }
+    result <- purrr::map_dfr(county_codes$area_code, function(ac) {
+      Sys.sleep(0.25)
       df <- fetch_county_qtr(ac, y, q)
-      if (is.null(df) || nrow(df) == 0) {
-        return(tibble::tibble())
-      }
+      if (is.null(df) || nrow(df) == 0) return(tibble::tibble())
       df %>% dplyr::mutate(area_code = ac)
     })
+    if (nrow(result) > 0) {
+      fs::dir_create(cache_dir, recurse = TRUE)
+      saveRDS(result, cache_path)
+    }
+    result
   }
 
   latest_yq <- detect_latest_yq("01001")
-  all_latest <- tryCatch(pull_qtr(latest_yq$year, latest_yq$quarter), error = function(e) tibble::tibble())
-  all_2022q1 <- tryCatch(pull_qtr("2022", "1"), error = function(e) tibble::tibble())
+  all_latest <- tryCatch(
+    pull_qtr_cached(latest_yq$year, latest_yq$quarter, paths$cache_dir),
+    error = function(e) tibble::tibble()
+  )
+  all_2022q1 <- tryCatch(
+    pull_qtr_cached("2022", "1", paths$cache_dir),
+    error = function(e) tibble::tibble()
+  )
 
   if (nrow(all_latest) > 0) {
     county_elec_latest <- all_latest %>%
@@ -1318,11 +1356,13 @@ processed_inputs <- processed_inputs %>%
     battery_manufacturing = dplyr::coalesce(`battery_manufacturing.raw`, battery_manufacturing),
     solar_manufacturing = dplyr::coalesce(`solar_manufacturing.raw`, solar_manufacturing),
     ev_manufacturing = dplyr::coalesce(`ev_manufacturing.raw`, ev_manufacturing),
-    industrial_electricity_price = dplyr::coalesce(industrial_electricity_price),
-    #workforce_share = dplyr::coalesce(`workforce_share.raw`, workforce_share),
-    #workforce_growth = dplyr::coalesce(`workforce_growth.raw`, workforce_growth)
+    # ind_price_m is the raw column name from the industrial_electricity_price
+    # tibble; coalesce prefers any value already present in base_inputs.
+    industrial_electricity_price = dplyr::coalesce(.data$industrial_electricity_price, .data$ind_price_m),
+    workforce_share = dplyr::coalesce(`workforce_share.raw`, workforce_share),
+    workforce_growth = dplyr::coalesce(`workforce_growth.raw`, workforce_growth)
   ) %>%
-  dplyr::select(-dplyr::ends_with(".raw"))
+  dplyr::select(-dplyr::ends_with(".raw"), -dplyr::any_of("ind_price_m"))
 
 required_cols <- required_input_columns()
 missing_cols <- setdiff(required_cols, names(processed_inputs))
@@ -1475,45 +1515,52 @@ if (is.null(cluster_pea_inputs) || nrow(cluster_pea_inputs) == 0) {
   }
 }
 
-  
 
-  
-    pea_sf <- tryCatch(
-      suppressWarnings(sf::st_read(pea_shapefile, quiet = TRUE)),
-      error = function(e) NULL
-    )
+# Compute PEA-level clean electric capacity growth from elec_fac facility
+# points. This enriches cluster_pea_inputs regardless of whether those inputs
+# came from a pre-built CSV or were derived from the electrotech_fac rollup.
+if (!is.null(pea_sf) && nrow(elec_fac) > 0) {
+  # Re-use the already-loaded pea_sf; ensure it exposes an economic_area
+  # column. Use a local copy to avoid mutating the shared variable.
+  pea_sf_ea <- pea_sf
+  if (!"economic_area" %in% names(pea_sf_ea)) {
+    pea_names_local    <- names(pea_sf_ea)
+    pea_name_col_local <- intersect(
+      c("PEA_Name", "PEA_NAME", "fcc_pea_name", "pea_name", "name"),
+      pea_names_local
+    )[1]
+    if (!is.na(pea_name_col_local)) {
+      pea_sf_ea <- sf::st_make_valid(pea_sf_ea) %>%
+        sf::st_transform(4326) %>%
+        dplyr::transmute(economic_area = as.character(.data[[pea_name_col_local]]))
+    } else {
+      pea_sf_ea <- NULL
+    }
+  }
 
-    
-      pea_names <- names(pea_sf)
-      pea_name_col <- intersect(c("PEA_Name", "PEA_NAME", "fcc_pea_name", "pea_name", "name"), pea_names)[1]
+  if (!is.null(pea_sf_ea)) {
+    pea_points <- elec_fac %>%
+      dplyr::filter(!is.na(.data$Longitude), !is.na(.data$Latitude)) %>%
+      sf::st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326, remove = FALSE)
 
-        pea_sf <- sf::st_make_valid(pea_sf)
+    cluster_pea_clean_electric_capacity_growth <- pea_points %>%
+      sf::st_join(pea_sf_ea, join = sf::st_intersects, left = FALSE) %>%
+      sf::st_drop_geometry() %>%
+      dplyr::filter(!is.na(.data$economic_area), !is.na(.data$state_abbr)) %>%
+      dplyr::group_by(.data$economic_area, .data$state_abbr) %>%
+      dplyr::summarize(clean_electric_capacity_growth_pea = sum(.data$size, na.rm = TRUE), .groups = "drop") %>%
+      dplyr::rename(abbr = .data$state_abbr)
+  }
+}
 
-        pea_sf <- pea_sf %>%
-          sf::st_transform(4326) %>%
-          dplyr::mutate(economic_area = as.character(economic_area)) %>%
-          dplyr::select(.data$economic_area)
-
-        pea_points <- elec_fac %>%
-          dplyr::filter(!is.na(.data$Longitude), !is.na(.data$Latitude)) %>%
-          sf::st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326, remove = FALSE)
-
-        
-          cluster_pea_clean_electric_capacity_growth <- pea_points %>%
-            sf::st_join(pea_sf, join = sf::st_intersects, left = FALSE) %>%
-            sf::st_drop_geometry() %>%
-            dplyr::filter(!is.na(.data$economic_area), !is.na(.data$state_abbr)) %>%
-            dplyr::group_by(.data$economic_area, .data$state_abbr) %>%
-            dplyr::summarize(clean_electric_capacity_growth_pea = sum(.data$size, na.rm = TRUE), .groups = "drop") %>%
-            dplyr::rename(abbr = .data$state_abbr)
-
-
+if (!is.null(cluster_pea_inputs) && !is.null(cluster_pea_clean_electric_capacity_growth)) {
   cluster_pea_inputs <- cluster_pea_inputs %>%
     dplyr::left_join(cluster_pea_clean_electric_capacity_growth, by = c("economic_area", "abbr")) %>%
     dplyr::mutate(
       clean_electric_capacity_growth = dplyr::coalesce(.data$clean_electric_capacity_growth_pea, .data$clean_electric_capacity_growth)
     ) %>%
     dplyr::select(-.data$clean_electric_capacity_growth_pea)
+}
 
 
 if (is.null(cluster_pea_manufacturing)) {
