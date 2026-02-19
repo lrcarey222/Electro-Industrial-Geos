@@ -971,7 +971,7 @@ if (!is.null(facility_raw)) {
             }
           }
         }
-      }
+      
     
 
 if (is.null(cluster_manufacturing)) {
@@ -1000,7 +1000,7 @@ if (is.null(cluster_manufacturing)) {
         tidyr::pivot_wider(names_from = .data$technology, values_from = .data$value, values_fill = 0) %>%
         dplyr::left_join(states, by = c("state" = "abbr")) %>%
         dplyr::transmute(
-          state = dplyr::coalesce(.data$state.y, .data$state.x),
+          state = dplyr::coalesce(.data$state.y, .data$state),
           battery_manufacturing = .data$battery_manufacturing,
           solar_manufacturing = .data$solar_manufacturing,
           ev_manufacturing = .data$ev_manufacturing
