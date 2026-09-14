@@ -1,0 +1,138 @@
+# ---------------------------------------------------------------------------
+# Steward map — TEMPLATE / EXAMPLE ONLY
+#
+# Phase 0 deliverable. Every value below is a placeholder. Copy to
+# `config/stewards.yml` and fill in real handles and addresses there.
+#
+#   cp config/stewards.example.yml config/stewards.yml
+#
+# `config/stewards.yml` is the file the freshness notifier reads to decide who
+# gets assigned a `data-refresh` issue. This `.example.yml` file stays in the
+# repo as the documented schema and is never read by the pipeline.
+#
+# Deliberately NOT populated with real names or addresses — those are for a
+# human to add. Do not commit personal contact details that are not already
+# public; `github_handle` alone is sufficient for issue assignment, and `email`
+# may be left null.
+# ---------------------------------------------------------------------------
+
+# Schema
+# ------
+# stewards:
+#   - id:              short slug, referenced by `steward:` in config/sources.yml
+#     github_handle:   GitHub username WITHOUT the leading "@"; must be able to
+#                      be assigned issues in this repo, or assignment silently
+#                      no-ops
+#     name:            display name used in the rendered docs/data_status.md
+#     email:           optional; only used by the webhook fan-out, never printed
+#                      into a public issue body. null is fine.
+#     role:            free text, for the stewardship doc
+#     sources_owned:   list of `id` values from config/sources.yml
+#     backup:          optional steward `id` to notify once a source is past
+#                      `fail_after_days`
+#
+# Invariants the CI schema check should enforce (Phase 1.1):
+#   - every `steward:` in sources.yml resolves to an `id` here
+#   - every source id in `sources_owned` exists in sources.yml
+#   - every source in sources.yml is owned by exactly one steward
+#     (the union of all `sources_owned` == the set of source ids, no overlaps)
+#   - `unassigned` is empty before the first scheduled notifier run
+
+stewards:
+  - id: steward-a
+    github_handle: PLACEHOLDER-HANDLE-A
+    name: "Placeholder Steward A"
+    email: null
+    role: "PLACEHOLDER — e.g. energy data lead"
+    backup: steward-b
+    sources_owned:
+      # Public, automatable — the Phase 2 connector shortlist.
+      - eia_861m_sales_revenue        # feeds electricity_price, industrial_electricity_price
+      - eia_860m_generators           # feeds electric_capacity_growth, clean_electric_capacity_growth
+      - lbnl_interconnection_queue    # feeds interconnection_queue
+      - afdc_station_counts           # feeds ev_stations_cap
+      - afdc_ev_registrations         # feeds evs_per_capita
+
+  - id: steward-b
+    github_handle: PLACEHOLDER-HANDLE-B
+    name: "Placeholder Steward B"
+    email: null
+    role: "PLACEHOLDER — e.g. economic data lead"
+    backup: steward-a
+    sources_owned:
+      - bea_sagdp                     # feeds incentives_gdp denominator
+      - bea_sqgdp                     # feeds gdp_growth_index
+      - bls_qcew                      # feeds workforce_share, workforce_growth
+      - eig_dynamism                  # feeds economic_dynamism
+      - census_county_population      # PEA population denominator
+      - census_tiger_states           # state boundaries for point-in-polygon
+      - fcc_pea_shapefile             # PEA geography
+      - fcc_pea_county_crosswalk      # PEA-to-county crosswalk
+
+  - id: steward-c
+    github_handle: PLACEHOLDER-HANDLE-C
+    name: "Placeholder Steward C"
+    email: null
+    role: "PLACEHOLDER — e.g. owner of licensed subscriptions"
+    backup: steward-a
+    sources_owned:
+      # Licensed or editorial. These are manual drops; the steward needs
+      # subscription access, and can_commit_raw is presumed false for all of
+      # them until confirmed. See docs/refactor_plan.md F-13.
+      - bnef_datacenter_capacity      # feeds datacenter_index, datacenter_mw
+      - gjf_subsidy_tracker           # feeds incentives_gdp
+      - climate_legislation           # feeds legislation_index
+      - cnbc_state_rankings           # feeds cnbc_rank
+      - clean_investment_monitor      # feeds clean_tech_investment + 3 manufacturing indicators
+      - sia_semiconductor_investment  # feeds semiconductor_investment, semiconductor_manufacturing
+
+  - id: steward-d
+    github_handle: PLACEHOLDER-HANDLE-D
+    name: "Placeholder Steward D"
+    email: null
+    role: "PLACEHOLDER — e.g. owner of internal RMI analysis outputs"
+    backup: steward-b
+    sources_owned:
+      # Derived from internal RMI work. No public endpoint can replace these;
+      # the steward owns regenerating them. See docs/data_audit.md §5.3.
+      - rmi_feasibility               # feeds feasibility_index, industry_feasibility
+      - nrel_supply_curve             # feeds renewable_potential
+      - rmi_employment_lq             # feeds employment_lq
+
+  - id: steward-e
+    github_handle: PLACEHOLDER-HANDLE-E
+    name: "Placeholder Steward E"
+    email: null
+    role: "PLACEHOLDER — e.g. policy research"
+    backup: steward-c
+    sources_owned:
+      # Statutory or hand-researched. Low cadence, high review burden.
+      - cpcn_requirements             # feeds cpcn — see docs/data_audit.md A-4, needs legal review
+      - state_sepa                    # feeds sepa
+      - solar_ordinances              # feeds ordinance
+      - regdata_subnational           # feeds regdata_index — publisher known, endpoint not recorded
+
+# ---------------------------------------------------------------------------
+# Unassigned — must be empty before the first scheduled notifier run.
+#
+# These sources have no identified publisher in the codebase, so they cannot be
+# assigned yet: naming an owner requires first knowing what the source is.
+# Each is `access_class: unknown` in docs/data_audit.md and is treated as
+# `manual` until a human confirms it. Every one of these feeds a live indicator.
+#
+# Resolving an entry means answering three questions:
+#   1. who publishes it?  2. may we redistribute it?  3. who owns refreshing it?
+# ---------------------------------------------------------------------------
+unassigned:
+  - id: spot_gap_analysis
+    feeds: [spot_score]
+    blocker: "Publisher not identified. `50 State Gap Analysis.xlsx` has no provenance metadata; Legacy:82 is `spot <- spot`. See docs/data_audit.md A-1."
+  - id: dsire_policy_count
+    feeds: [dsire_policy_count]
+    blocker: "No producer exists in the repo. Docs name DSIRE; Legacy:85 reads an undefined `dsire_inc`. Indicator currently holds sample data only."
+  - id: dev_program_db
+    feeds: [dev_policy_count]
+    blocker: "`dbo_Program.csv` is a SQL Server export of unidentified origin. Deliberately not attributed to a vendor. See docs/data_audit.md A-2."
+  - id: drone_facility_announcements
+    feeds: []
+    blocker: "Hand-compiled from press sources. Feeds pea_electro.csv only, not any index indicator — confirm whether it should be retained at all."
