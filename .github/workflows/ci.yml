@@ -13,6 +13,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: r-lib/actions/setup-r@v2
+      # Runs before dependency installation on purpose: parse() is base R, so a
+      # syntax error is reported in seconds rather than after a package build.
+      - name: Syntax check
+        run: Rscript scripts/check_syntax.R
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           extra-packages: any::renv, any::testthat, any::lintr

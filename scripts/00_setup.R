@@ -14,8 +14,14 @@ suppressPackageStartupMessages({
   library(yaml)
   library(openxlsx)
   library(readxl)
-  library(blsAPI)
 })
+
+# blsAPI is deliberately not attached here. It was archived from CRAN on
+# 2021-07-05, so `library(blsAPI)` made the whole pipeline un-installable from a
+# clean checkout. The only call site uses the fully qualified `blsAPI::blsQCEW()`
+# inside a block that is currently guarded off, so attaching it was redundant.
+# Sourcing this package is a decision for the work that reinstates the QCEW path
+# -- see docs/refactor_plan.md F-05 and F-16.
 
 if (!exists("repo_root", inherits = FALSE) || is.null(repo_root)) {
   repo_root <- tryCatch(find_repo_root(), error = function(e) NULL)
