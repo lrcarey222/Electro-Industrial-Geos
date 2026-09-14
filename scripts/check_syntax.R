@@ -90,5 +90,29 @@ if (length(failures) > 0) {
   quit(status = 1)
 }
 
-cat(sprintf("check_syntax: %d R files parse cleanly\n", length(files)))
+# DESCRIPTION must be readable as a Debian Control File. It is how CI resolves
+# dependencies (`setup-r-dependencies` reads it), so a malformed continuation
+# line silently costs you every declared package. This is not hypothetical: a
+# bare `)` at column 0 closing `Authors@R` made the file unreadable, and pak
+# failed with "Line starting ') ...' is malformed!" long before any R code ran.
+# DCF continuation lines must be indented.
+desc_path <- file.path(repo_root, "DESCRIPTION")
+if (file.exists(desc_path)) {
+  desc_err <- tryCatch(
+    {
+      read.dcf(desc_path)
+      NA_character_
+    },
+    error = function(e) conditionMessage(e)
+  )
+  if (!is.na(desc_err)) {
+    cat("check_syntax: DESCRIPTION is not a readable control file\n")
+    cat("    ", desc_err, "\n\n", sep = "")
+    cat("Continuation lines in DESCRIPTION must be indented. CI resolves\n")
+    cat("dependencies from this file, so nothing installs while it is malformed.\n")
+    quit(status = 1)
+  }
+}
+
+cat(sprintf("check_syntax: %d R files parse cleanly; DESCRIPTION is well formed\n", length(files)))
 quit(status = 0)

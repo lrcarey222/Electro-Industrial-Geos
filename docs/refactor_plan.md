@@ -33,6 +33,7 @@ Severity is about the published index, not about code tidiness.
 | [F-14](#f-14) | high | No per-indicator vintage metadata exists anywhere | Phase 1 (the core gap) |
 | [F-15](#f-15) | medium | DC is excluded from all state outputs; the brief assumes 50 states + DC | needs your decision |
 | [F-16](#f-16) | **blocker** | Four packages the pipeline loads are declared nowhere, so CI cannot install them | ✅ fixed in step 0a |
+| [F-17](#f-17) | **blocker** | `DESCRIPTION` is not a readable control file, so CI has never installed *any* dependency | ✅ fixed in step 0a |
 
 ---
 
@@ -641,10 +642,13 @@ installed locally came from GitHub (`mikeasilva/blsAPI`). Adding `Imports: blsAP
 just as unresolvable, and adding a `Remotes:` entry would take on an unmaintained GitHub
 dependency in order to satisfy a `library()` call for code that never executes.
 
-**This means F-01 and F-16 are two independent blockers and both must be fixed for CI to go
-green.** I could not confirm which fires first in the historical CI runs, because step-level logs
-for the most recent failure (`22186740756`, 2026-02-19) have passed GitHub's 90-day retention
-window. Both are reproducible locally.
+**Correction.** The paragraph above is right about a clean *local* install but wrong about CI.
+F-17 — a malformed `DESCRIPTION` — means `setup-r-dependencies` has never successfully resolved
+anything, so CI never reached `library(blsAPI)` or any other line of this repo's R code. These
+undeclared packages were a real blocker waiting behind F-17, not the one CI was dying on. I could
+not have distinguished the two from the historical runs: step-level logs for the most recent
+failure (`22186740756`, 2026-02-19) have passed GitHub's 90-day retention window, and F-17 only
+surfaced when step 0a's fix was actually pushed through CI.
 
 **Remedy — landed in step 0a**, differentiated by how each package is actually called:
 
@@ -659,6 +663,56 @@ window. Both are reproducible locally.
 
 `renv.lock` is deliberately **not** touched here; regenerating it needs a real `renv::init()` /
 `renv::snapshot()`, which is its own work item (see 3.5).
+
+---
+
+<a id="f-17"></a>
+### F-17 — `DESCRIPTION` is not a readable control file *(blocker)*
+
+Found by running step 0a's fix through CI. `DESCRIPTION` is a Debian Control File, in which
+**continuation lines must be indented**. The `Authors@R` field closes with a bare `)` at column 0:
+
+```
+Authors@R: c(
+    person("OpenAI Codex", role = c("aut", "cre"), email = "noreply@example.com")
+)
+```
+
+DCF reads that `)` as the start of a new field, and `)` is not a valid field name. `read.dcf()`
+therefore fails on the file as committed to `main`:
+
+```
+ERROR: Line starting ') ...' is malformed!
+```
+
+CI resolves dependencies with `setup-r-dependencies@v2`, which reads this file, so the step fails
+during resolution with the same message surfaced through `pak`:
+
+```
+! error in pak subprocess
+Caused by error:
+! Could not solve package dependencies:
+* deps::.: ! pkgdepends resolution error for deps::..
+Caused by error:
+! Line starting ') ...' is malformed!
+```
+
+**This is the true first CI blocker, and it changes the story in F-16.** CI has never installed a
+single declared dependency and has never reached `library(blsAPI)` at all — resolution failed
+before any R code in this repo ran. F-16's undeclared packages were real and would have bitten on
+the next run; they simply were not what CI was dying on. My original F-16 write-up asserted the
+pipeline "dies at stage one of six", which is correct for a clean *local* install but wrong about
+CI. Corrected inline there.
+
+It also explains a detail I noted but could not account for in Part 2 item 7: `renv.lock` is a
+stub, yet CI appeared to survive dependency installation. It never did.
+
+**Remedy — landed in step 0a.** Indent the closing paren. `scripts/check_syntax.R` now also runs
+`read.dcf()` on `DESCRIPTION` and fails with a pointed message, so this cannot recur.
+
+**Not changed here:** the placeholder author value itself. `person("OpenAI Codex", …,
+email = "noreply@example.com")` is wrong, but who should be credited is your call, not mine — see
+3.7, which also covers `CITATION.cff` and `inst/CITATION`.
 
 ---
 
