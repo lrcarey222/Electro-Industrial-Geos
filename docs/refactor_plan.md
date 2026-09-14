@@ -19,7 +19,7 @@ Severity is about the published index, not about code tidiness.
 |---|---|---|---|
 | [F-01](#f-01) | **blocker** | The pipeline does not run: `scripts/07_process_data.R` fails to parse | ✅ fixed in step 0a |
 | [F-02](#f-02) | **blocker** | The canonical methodology script does not parse and is not self-contained | Phase 5 (blocks parity test) |
-| [F-03](#f-03) | **high** | The test suite executes zero assertions; the one parity check compares against `NULL` | pre-Phase 1 |
+| [F-03](#f-03) | **high** | The test suite executes zero assertions; the one parity check compares against `NULL` | ✅ fixed in step 0b |
 | [F-04](#f-04) | **high** | EIA electricity price reads the **residential** column, not industrial — a regression against the committed vintage | issue → separate PR |
 | [F-05](#f-05) | **high** | `industrial_electricity_price` is joined under the wrong column name, so the indicator keeps sample data | issue → separate PR |
 | [F-06](#f-06) | **high** | `SQGDP.zip` is read but never downloaded; BEA filenames are hard-coded with years and fail silently | Phase 2 |
@@ -34,6 +34,8 @@ Severity is about the published index, not about code tidiness.
 | [F-15](#f-15) | medium | DC is excluded from all state outputs; the brief assumes 50 states + DC | needs your decision |
 | [F-16](#f-16) | **blocker** | Four packages the pipeline loads are declared nowhere, so CI cannot install them | ✅ fixed in step 0a |
 | [F-17](#f-17) | **blocker** | `DESCRIPTION` is not a readable control file, so CI has never installed *any* dependency | ✅ fixed in step 0a |
+| [F-18](#f-18) | medium | `Package:` is not a legal R package name, so the package can never be installed | needs your decision |
+| [F-19](#f-19) | **blocker** | `renv.lock` is structurally invalid, so `renv::restore()` aborts | ✅ unblocked in step 0b; real pinning deferred |
 
 ---
 
@@ -207,9 +209,29 @@ fixture$Electro_Industrial_index_w is NULL: TRUE
 `expect_equal(<numeric>, NULL)` cannot pass, so once (a) is fixed this test will fail — correctly,
 and confusingly, because the *code* is right and the *fixture* is wrong.
 
-**Remedy.** One PR: make the tests locate the repo root independently of wd (a `setup.R` or
-`testthat::test_local()`), regenerate the fixture from the code's actual column names, and
-re-baseline. The fixture values themselves need re-deriving once F-04 and F-05 are settled.
+**Remedy — landed in step 0b.** `tests/testthat/setup.R` locates the repo root by walking up to
+`DESCRIPTION`, sources `R/` once for all test files, and exposes a `fixture_path()` helper so no
+test depends on the working directory. The three test files lose their broken `source()` blocks.
+
+**The fixture values needed no re-deriving.** Every value in it matches the current code exactly at
+`tolerance = 1e-12` — all six sub-indices plus both composite columns. There has been no numerical
+drift; the only defect was the two hyphenated headers, so this is a header-only change and the
+recorded baseline is preserved rather than re-blessed. F-04 and F-05 do not affect it either: the
+sample-data path supplies `industrial_electricity_price` directly and never touches EIA.
+
+**One genuine bug surfaced**, which is the point of repairing a harness that never ran. The
+*"cluster index uses max anchor"* test asserted against `out[1, ]` as though output row order
+matched input order, but `build_cluster_index()` ends with `arrange(desc(cluster_index))`. With
+that test's data, state B outscores state A — B leads on every non-anchor positive — so the
+assertion was reading B's row and failing. **The production code is correct**: A's dominant anchor
+is `semiconductor_manufacturing` and B's is `datacenter_mw`, exactly as intended. The test now
+selects by state, asserts both anchors, and checks the sort order as an explicit property instead
+of assuming it.
+
+Result: **41 passing, 0 failures**, up from 0 passing and 3 load errors.
+
+A new test also asserts that the weights pinned in `setup.R` still match `config/weights.yml`, so a
+weights change cannot pass CI while silently moving every published score.
 
 ---
 
@@ -716,6 +738,79 @@ email = "noreply@example.com")` is wrong, but who should be credited is your cal
 
 ---
 
+<a id="f-18"></a>
+### F-18 — `Package:` is not a legal R package name *(medium — needs your decision)*
+
+[`DESCRIPTION:1`](../DESCRIPTION#L1) declares:
+
+```
+Package: Electro-Industrialindex
+```
+
+R package names must match `^[a-zA-Z][a-zA-Z0-9.]*$` — letters, digits and dots only. **Hyphens are
+not permitted**, so this package can never be built or installed. Verified:
+
+```r
+grepl("^[a-zA-Z][a-zA-Z0-9.]*$", "Electro-Industrialindex")
+#> FALSE
+```
+
+Two things depend on it and are therefore dead:
+
+- [`tests/testthat.R:2-4`](../tests/testthat.R#L2) — `library(Electro-Industrialindex)` and
+  `test_check("Electro-Industrialindex")`. This is the `R CMD check` entry point. Note it *parses*
+  (R reads `Electro-Industrialindex` as the subtraction `Electro - Industrialindex`), so
+  `check_syntax.R` cannot catch it; it fails at runtime.
+- [`ingest_sample.R:12`](../R/utils/ingest_sample.R#L12) — the
+  `system.file("extdata", "sample_inputs.csv", package = "Electro-Industrialindex")` fallback can
+  never resolve, which makes `inst/extdata/sample_inputs.csv` unreachable. The primary
+  `data/examples/` path is what actually works.
+
+Step 0b works around this: `tests/testthat/setup.R` sources `R/` directly rather than attaching a
+package, so the suite runs without the package being installable. `tests/testthat.R` is left as-is
+because fixing it properly requires choosing a name.
+
+**Your decision.** Renaming touches `DESCRIPTION`, `NAMESPACE`, `tests/testthat.R`,
+`ingest_sample.R` and anything downstream that installs this. A legal name close to the current one
+would be `ElectroIndustrialIndex` or `eigindex`; the repo-wide `EIG_` prefix proposed for the
+environment variables suggests `eigindex`. I have not chosen one.
+
+Worth noting this is the same root cause as F-02: a global find-and-replace inserted
+`Electro-Industrial` into identifiers where a hyphen is illegal. The legacy script got syntax
+errors; `DESCRIPTION` got an unusable package name.
+
+---
+
+<a id="f-19"></a>
+### F-19 — `renv.lock` is structurally invalid, so `renv::restore()` aborts *(blocker)*
+
+Confirmed as an active CI failure, not just the latent defect described in 3.5. With F-17 fixed,
+dependency installation succeeded and CI advanced to the next step, which then failed:
+
+```
+Error in if (source %in% c("git2r", "xgit")) source <- "git" :
+  argument is of length zero
+Calls: <Anonymous> ... renv_lockfile_repair -> enumerate -> f -> renv_record_source_normalize
+```
+
+`renv_record_source_normalize(record, record$Source)` receives `NULL` because **not one of the 18
+package entries has a `Source` field** — they carry only `Package` and `Version`. The lockfile was
+hand-written, not produced by `renv::snapshot()`. Combined with `renv/activate.R` being a no-op
+(3.5), the project has renv's shape without any of its behaviour.
+
+**Remedy — unblocked in step 0b, not solved.** The `Restore renv` step is removed from CI.
+Dependencies are resolved from `DESCRIPTION` by `setup-r-dependencies`, which is what has actually
+been doing the work all along; the renv step contributed nothing but a failure. A step that only
+pretends to pin versions is worse than no step, because it advertises reproducibility the project
+does not have.
+
+**Still outstanding:** genuine version pinning. That needs `renv::init()` followed by a real
+`renv::snapshot()` on a Linux library matching CI, and it pairs naturally with Phase 5 item 7
+(dated rocker image + snapshot checking). It is deliberately not attempted here — generating a
+lockfile on Windows for an Ubuntu runner is how you get a lockfile that fails differently.
+
+---
+
 ## Part 2 — The brief's structural hypotheses, confirmed or refuted
 
 ### 1. Committed OneDrive tree — **CONFIRMED (portability), and it is dead code**
@@ -1049,7 +1144,7 @@ This departs from the brief in one respect, and only one: **two blockers land be
 | step | work | rationale |
 |---|---|---|
 | **0a** ✅ | Fix F-01 (two brace defects) and F-16 (undeclared packages) + `scripts/check_syntax.R` in CI | the pipeline must parse before anything can report on it; these were two independent blockers |
-| **0b** | Fix F-03 (test wd + fixture) | CI must be able to go green before a scheduled job starts filing issues |
+| **0b** ✅ | Fix F-03 (test wd + fixture) and unblock F-19 (invalid `renv.lock`) | CI must be able to go green before a scheduled job starts filing issues |
 | **0c** | Make the smoke test pass: F-10 (untracked `FCC_PEA_website.xlsx`) and F-11 (unguarded live reads), plus whatever the first full run surfaces | step 0a makes the file *parse*; it does not make `Rscript run_pipeline.R` *succeed* |
 | **1** | Phase 1 as briefed — `sources.yml`, manifest, freshness engine, notifier | delivers value with zero connectors; the orphan check alone would have caught F-05 |
 | **1b** | Issues for F-04, F-05 (each its own PR, each with a diff report) | both move published numbers; needs your sign-off on F-04's bug-vs-methodology framing |

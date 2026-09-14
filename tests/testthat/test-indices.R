@@ -1,40 +1,8 @@
 library(testthat)
 library(dplyr)
 
-source("R/utils/utils_helpers.R")
-source("R/utils/utils_scale.R")
-source("R/utils/utils_index.R")
-source("R/utils/ingest_sample.R")
-source("R/categories/build_policy_intent.R")
-source("R/categories/build_regulatory_ease.R")
-source("R/categories/build_economic_capabilities.R")
-source("R/categories/build_infrastructure.R")
-source("R/categories/build_deployment.R")
-source("R/categories/build_cluster_index.R")
-source("R/indices/build_Electro-Industrial_index.R")
-source("R/indices/build_Electro-Industrial_pea_index.R")
-
-options(
-  Electro_Industrial.paths = list(examples_dir = "tests/fixtures"),
-  Electro_Industrial.weights = list(
-    `Electro-Industrial` = list(
-      deployment_index = 0.4,
-      infra_index = 0.15,
-      econ_index = 0.15,
-      intent_index = 0.2,
-      cluster_index = 0.2,
-      ease_index = 0.2
-    ),
-    infrastructure = list(
-      renewable_potential = 0.2,
-      ev_stations_cap = 0.2,
-      interconnection_queue = 0.2,
-      electricity_price = 0.2,
-      cnbc_rank = 0.2
-    )
-  )
-)
-
+# Implementation, fixture paths and index weights all come from
+# tests/testthat/setup.R.
 
 test_that("sub-index builders return expected columns", {
   inputs <- load_sample_inputs()
@@ -76,9 +44,26 @@ test_that("cluster index uses max anchor", {
 
   out <- build_cluster_index(df)
 
-  expect_true(out$cluster_index[1] >= out$cluster_index[2])
-  expect_true(out$dominant_anchor[1] == "semiconductor_manufacturing")
-  expect_true(out$cluster_top[1] != "")
+  # build_cluster_index() ends with arrange(desc(cluster_index)), so output row
+  # order is by score and NOT by input order. This test previously asserted
+  # against out[1, ] as though it were state A; with this data state B scores
+  # higher (it leads on every non-anchor positive), so the assertion was reading
+  # B's row and failing. It never surfaced because the suite errored at load and
+  # ran no assertions at all. Select by state instead of by position.
+  a <- out[out$state == "A", ]
+  b <- out[out$state == "B", ]
+
+  # A's anchors are 1/5/3/2/4, so after per-column scaling its winning anchor is
+  # semiconductor_manufacturing; B leads only on datacenter_mw.
+  expect_equal(a$dominant_anchor, "semiconductor_manufacturing")
+  expect_equal(b$dominant_anchor, "datacenter_mw")
+
+  # The sort invariant itself, asserted as a property rather than assumed.
+  expect_equal(out$cluster_index, sort(out$cluster_index, decreasing = TRUE))
+
+  # cluster_top is populated only above the 0.5 threshold, which B clears here.
+  expect_true(b$cluster_index > 0.5)
+  expect_equal(b$cluster_top, "B")
 })
 
 test_that("state cluster rolls up top PEA cluster", {
@@ -118,7 +103,51 @@ test_that("Electro-Industrial weighted index matches fixture", {
 
   Electro_Industrial <- build_Electro_Industrial_index(deployment, infra, economic, policy, regulatory, cluster)
 
-  expected <- readr::read_csv("tests/fixtures/expected_Electro-Industrial.csv", show_col_types = FALSE)
+  expected <- readr::read_csv(
+    fixture_path("expected_Electro-Industrial.csv"),
+    show_col_types = FALSE
+  )
 
-  expect_equal(Electro_Industrial$Electro_Industrial_index_w, expected$Electro_Industrial_index_w, tolerance = 1e-8)
+  # Guard against the failure mode this fixture used to have: its headers were
+  # hyphenated (`Electro-Industrial_index_w`) while the code emits the
+  # underscore form, so `expected$Electro_Industrial_index_w` was NULL and the
+  # comparison below was vacuous. Assert the column exists before using it.
+  expect_true("Electro_Industrial_index_w" %in% names(expected))
+  expect_true("Electro_Industrial_index" %in% names(expected))
+
+  # Match on state rather than relying on row order.
+  actual <- Electro_Industrial[match(expected$state, Electro_Industrial$state), ]
+  expect_equal(actual$state, expected$state)
+
+  expect_equal(actual$Electro_Industrial_index_w, expected$Electro_Industrial_index_w, tolerance = 1e-8)
+  expect_equal(actual$Electro_Industrial_index, expected$Electro_Industrial_index, tolerance = 1e-8)
+
+  for (sub_index in c(
+    "deployment_index", "infra_index", "econ_index",
+    "intent_index", "cluster_index", "ease_index"
+  )) {
+    expect_equal(
+      actual[[sub_index]],
+      expected[[sub_index]],
+      tolerance = 1e-8,
+      info = sub_index
+    )
+  }
+})
+
+test_that("test weights still agree with config/weights.yml", {
+  # setup.R pins the weights so this fixture stays hermetic. That is only safe
+  # while the pinned values match the shipped config -- otherwise a weights
+  # change would pass CI while silently moving every published score. Methodology
+  # is meant to stay frozen while data moves, so make drift fail loudly here.
+  shipped <- yaml::read_yaml(file.path(repo_root, "config", "weights.yml"))
+
+  expect_equal(
+    shipped[["Electro-Industrial"]][order(names(shipped[["Electro-Industrial"]]))],
+    test_weights[["Electro-Industrial"]][order(names(test_weights[["Electro-Industrial"]]))]
+  )
+  expect_equal(
+    shipped$infrastructure[order(names(shipped$infrastructure))],
+    test_weights$infrastructure[order(names(test_weights$infrastructure))]
+  )
 })

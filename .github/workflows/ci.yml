@@ -20,8 +20,17 @@ jobs:
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           extra-packages: any::renv, any::testthat, any::lintr
-      - name: Restore renv
-        run: Rscript -e "if (file.exists('renv.lock')) renv::restore(prompt = FALSE)"
+      # The `Restore renv` step was removed here. renv.lock is a hand-written
+      # stub whose 18 entries carry only Package and Version -- no Source,
+      # Repository or Hash -- so renv::restore() aborts in
+      # renv_record_source_normalize() with "argument is of length zero". It has
+      # never worked, and renv/activate.R is a no-op, so the project has renv's
+      # shape without its behaviour. Dependencies are resolved from DESCRIPTION
+      # by setup-r-dependencies above, which is what has actually been doing the
+      # work. Reproducible pinning is real outstanding work that needs a genuine
+      # renv::init()/snapshot() -- see docs/refactor_plan.md F-19 and 3.5.
+      # Keeping a step that only pretends to pin versions is worse than not
+      # having one.
       - name: Secret scan
         run: |
           if git grep -nE "(AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z\-_]{35}|ghp_[0-9A-Za-z]{36}|password\s*=|secret\s*=|token\s*=)" -- .; then
