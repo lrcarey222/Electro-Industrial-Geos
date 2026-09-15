@@ -1,10 +1,7 @@
 library(testthat)
 library(dplyr)
 
-source("R/utils/utils_helpers.R")
-source("R/utils/utils_index.R")
-source("R/utils/incentives_sector.R")
-source("R/visualization/state_profile_helpers.R")
+# Implementation comes from tests/testthat/setup.R.
 
 test_that("rowmean_index returns NA for all-NA rows", {
   x <- tibble::tibble(a = c(NA, 1), b = c(NA, 3))

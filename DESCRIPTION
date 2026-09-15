@@ -3,7 +3,7 @@ Title: Electro-Industrial Index Pipeline
 Version: 0.1.0
 Authors@R: c(
     person("OpenAI Codex", role = c("aut", "cre"), email = "noreply@example.com")
-)
+  )
 Description: Reproducible pipeline and utilities to build the Electro-Industrial Index
     from public and proprietary data sources, with a targets workflow and
     documented methodology.
@@ -16,8 +16,10 @@ Imports:
     fs,
     glue,
     janitor,
+    lubridate,
     purrr,
     readr,
+    readxl,
     rlang,
     sf,
     stringr,
@@ -29,5 +31,6 @@ Imports:
     openxlsx
 Suggests:
     testthat,
+    tidycensus,
     withr
 Config/testthat/edition: 3

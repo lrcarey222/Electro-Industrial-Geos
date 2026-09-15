@@ -104,6 +104,16 @@ Profiles are written to `outputs/state_profiles/`. If Quarto is unavailable, the
 
 ## Testing
 
+Check that every R source file parses. This runs first in CI, needs no packages, and catches the
+class of breakage where one unbalanced brace takes down the whole pipeline — `sys.source()` parses
+a stage before it evaluates any of it:
+
+```bash
+Rscript scripts/check_syntax.R
+```
+
+Then the unit tests:
+
 ```bash
 Rscript -e "renv::restore()"
 Rscript -e "testthat::test_dir('tests/testthat')"

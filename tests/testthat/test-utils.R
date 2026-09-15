@@ -1,14 +1,7 @@
 library(testthat)
 library(dplyr)
 
-source("R/utils/utils_helpers.R")
-source("R/utils/utils_scale.R")
-source("R/utils/utils_index.R")
-source("R/utils/ingest_sample.R")
-source("R/categories/build_policy_intent.R")
-
-options(Electro_Industrial.paths = list(examples_dir = "tests/fixtures"))
-
+# Implementation and fixture paths come from tests/testthat/setup.R.
 
 test_that("scale_minmax handles NA and Inf", {
   x <- c(1, 2, NA, Inf)

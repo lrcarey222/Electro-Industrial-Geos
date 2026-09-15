@@ -1131,9 +1131,14 @@ if (nrow(electrotech_fac) > 0) {
 }
 
 # ---- County employment (legacy wiring, state-level rollup) --------------
+# NOTE: the `blsQCEW` namespace tested below does not exist as a package; the
+# QCEW client used inside this block is `blsAPI::blsQCEW()`. The guard is
+# therefore always FALSE and the block never runs. Restored here as-is to keep
+# this fix behaviour-preserving -- see docs/refactor_plan.md F-05 for the
+# separate change that makes these two indicators reach the index.
 workforce_share_update <- NULL
 workforce_growth_update <- NULL
-
+if (requireNamespace("blsQCEW", quietly = TRUE) && requireNamespace("tidycensus", quietly = TRUE)) {
   electric_man_6d <- c(
     "513322", "513340", "513390", "515210", "517210", "517211", "517212", "517410", "517910", "517919",
     "334210", "334220", "334290", "335912", "221112", "221111", "221113", "221114", "221115", "221116", "221117", "221118", "221119", "221121",
@@ -1514,6 +1519,11 @@ if (is.null(cluster_pea_inputs) || nrow(cluster_pea_inputs) == 0) {
       clean_electric_capacity_growth = dplyr::coalesce(.data$clean_electric_capacity_growth_pea, .data$clean_electric_capacity_growth)
     ) %>%
     dplyr::select(-.data$clean_electric_capacity_growth_pea)
+# Closes the `if (is.null(cluster_pea_inputs) || nrow(...) == 0)` fallback block
+# opened above. This closer has been missing since a17d212, so the PEA override
+# code between here and that block has never executed. See docs/refactor_plan.md
+# section 3.3 -- the stripped guards in this region still need reinstating.
+}
 
 
 if (is.null(cluster_pea_manufacturing)) {
