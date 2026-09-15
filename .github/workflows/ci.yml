@@ -20,6 +20,12 @@ jobs:
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           extra-packages: any::renv, any::testthat, any::lintr
+      # Needs only `yaml`, so it runs before the data steps: fails the build if
+      # any indicator in index_definition.yml is claimed by no source, or by
+      # more than one, so a new indicator cannot enter the index with no
+      # provenance and no owner.
+      - name: Validate source registry
+        run: Rscript scripts/01_validate_sources.R
       # The `Restore renv` step was removed here. renv.lock is a hand-written
       # stub whose 18 entries carry only Package and Version -- no Source,
       # Repository or Hash -- so renv::restore() aborts in

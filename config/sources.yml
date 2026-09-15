@@ -1,0 +1,893 @@
+# ---------------------------------------------------------------------------
+# Source registry for the Electro-Industrial Index.
+#
+# One entry per SOURCE, not per indicator: a source may feed several
+# indicators, and several indicators may share a source. Every indicator in
+# config/index_definition.yml must be claimed by exactly one source -- CI fails
+# the build on an orphan (an indicator no source claims) or a double-claim.
+# That check is what stops a new indicator entering the index with no
+# provenance and no owner.
+#
+# Provenance for every entry is recorded in docs/data_audit.md, with the file
+# and line where the URL, path, or filename was actually found. Nothing here is
+# guessed: where the origin could not be determined from the code, the entry
+# says `access_class: unknown` and carries a TODO-CONFIRM.
+#
+# `# TODO-CONFIRM:` marks a value that is a conservative default awaiting a
+# human decision, not an established fact. Do not remove one without answering
+# the question it states.
+#
+# Secrets: `auth_env` holds the NAME of an environment variable, never a value.
+#
+# Denominator-only sources (BEA SAGDP, CIM socioeconomics) declare `feeds: []`.
+# They are required to build indicators but do not themselves own one, so
+# claiming an indicator here would trip the double-claim check.
+#
+# Deliberately NOT registered: data/raw/egrid2023_data_metric_rev2.xlsx,
+# data/raw/table_8.xlsx and data/raw/state_business_cycle_status.csv. All three
+# are staged by ingest_legacy_sources() but read by nothing -- see
+# docs/data_audit.md section 3. Registering dead data would put permanent noise
+# in every freshness report. They are a Phase 5 cleanup decision.
+# ---------------------------------------------------------------------------
+
+# Staleness SLAs are set from `cadence` using these defaults. They are a
+# PROPOSAL, not a policy: an SLA says how long the index may go on quoting a
+# number before someone must answer for it, which is an editorial judgement.
+#
+#   cadence      warn_after_days  fail_after_days
+#   monthly                   60              120
+#   quarterly                150              240
+#   annual                   400              550
+#   irregular                550              730
+#   static                   730             1095
+#
+# TODO-CONFIRM: these thresholds. Measured from `publisher_release_date`, most
+# sources are already past `warn` today -- EIA-861M ends 2025-11, the EIG
+# dynamism panel is 2022, AFDC registrations are 2023. That is the honest
+# reading of how stale the index is, but expect the first run to be mostly red.
+
+sources:
+
+  # -- Public, automatable: endpoint verified in the code ------------------
+
+  - id: eia_861m_sales_revenue
+    label: "EIA-861M retail sales and revenue by state and sector"
+    feeds: [electricity_price, industrial_electricity_price]
+    publisher: "U.S. Energy Information Administration"
+    access_class: api
+    endpoint: "https://www.eia.gov/electricity/data/eia861m/xls/sales_revenue.xlsx"
+    auth_env: null
+    geography: state
+    cadence: monthly
+    typical_release_lag_days: 75
+    refresh_cron: "0 9 5 * *"
+    staleness:
+      warn_after_days: 60
+      fail_after_days: 120
+    steward: TODO
+    can_commit_raw: true
+    license: "Public domain (US Government work)"
+    notes: >
+      Stable URL, no key. Sheet 1 repeats a four-column block per customer
+      class; the INDUSTRIAL price is the third Cents/kWh block (spreadsheet
+      column P), not the first. See docs/refactor_plan.md F-04 -- the current
+      code reads the residential column.
+
+  - id: eia_860m_generators
+    label: "EIA-860M preliminary monthly generator inventory"
+    feeds: [electric_capacity_growth, clean_electric_capacity_growth]
+    publisher: "U.S. Energy Information Administration"
+    access_class: api
+    endpoint: "https://www.eia.gov/electricity/data/eia860m/xls/{month}_generator{year}.xlsx"
+    auth_env: null
+    geography: state
+    cadence: monthly
+    typical_release_lag_days: 60
+    refresh_cron: "0 9 5 * *"
+    staleness:
+      warn_after_days: 60
+      fail_after_days: 120
+    steward: TODO
+    can_commit_raw: true
+    license: "Public domain (US Government work)"
+    notes: >
+      Filename is a predictable lowercase-month + year pattern, so the
+      connector must discover the latest available month rather than assume
+      one. 19 of the 21 workbooks currently staged under data/raw/remote are
+      identical 66,904-byte HTML error pages saved with an .xlsx extension --
+      see docs/refactor_plan.md F-12. Validate the PK signature on download.
+
+  - id: bea_sqgdp
+    label: "BEA quarterly GDP by state and industry"
+    feeds: [gdp_growth_index]
+    publisher: "U.S. Bureau of Economic Analysis"
+    access_class: file_url
+    endpoint: "https://apps.bea.gov/regional/zip/SQGDP.zip"
+    auth_env: null
+    geography: state
+    cadence: quarterly
+    typical_release_lag_days: 90
+    refresh_cron: "0 9 1 1,4,7,10 *"
+    staleness:
+      warn_after_days: 150
+      fail_after_days: 240
+    steward: TODO
+    can_commit_raw: true
+    license: "Public domain (US Government work)"
+    notes: >
+      Read by the pipeline but absent from the download registry, so it has
+      never been refreshed (F-06). The member filename embeds its vintage
+      (SQGDP9__ALL_AREAS_2005_2025.csv) and is matched exactly, so the next
+      release silently yields an empty table; match on the prefix instead.
+
+  - id: bea_sagdp
+    label: "BEA annual GDP by state"
+    feeds: []
+    publisher: "U.S. Bureau of Economic Analysis"
+    access_class: file_url
+    endpoint: "https://apps.bea.gov/regional/zip/SAGDP.zip"
+    auth_env: null
+    geography: state
+    cadence: annual
+    typical_release_lag_days: 275
+    refresh_cron: "0 9 1 * *"
+    staleness:
+      warn_after_days: 400
+      fail_after_days: 550
+    steward: TODO
+    can_commit_raw: true
+    license: "Public domain (US Government work)"
+    notes: >
+      Denominator only: supplies gdp_2024 for incentives_gdp, which is owned by
+      gjf_subsidy_tracker. Same hard-coded-vintage-filename problem as SQGDP.
+
+  - id: bls_qcew
+    label: "BLS Quarterly Census of Employment and Wages, county level"
+    feeds: [workforce_share, workforce_growth]
+    publisher: "U.S. Bureau of Labor Statistics"
+    access_class: api
+    endpoint: "https://data.bls.gov/cew/data/api/{year}/{quarter}/area/{area_code}.csv"
+    auth_env: null
+    geography: county-rolled-up
+    cadence: quarterly
+    typical_release_lag_days: 150
+    refresh_cron: "0 9 15 3,6,9,12 *"
+    staleness:
+      warn_after_days: 150
+      fail_after_days: 240
+    steward: TODO
+    can_commit_raw: true
+    license: "Public domain (US Government work)"
+    notes: >
+      Open data, no key. The existing implementation issues ~3,100 requests per
+      quarter pulled, twice, via blsAPI::blsQCEW(); a connector should use the
+      bulk single-file endpoint instead. blsAPI was archived from CRAN in 2021
+      (F-16). Both indicators currently hold sample data only (F-05).
+
+  - id: eig_dynamism
+    label: "EIG Index of State Dynamism"
+    feeds: [economic_dynamism]
+    publisher: "Economic Innovation Group"
+    access_class: file_url
+    endpoint: "https://eig.org/state-dynamism-2025/assets/Downloadable-Data-EIG-Index-of-State-Dynamism-2022.xlsx"
+    auth_env: null
+    geography: state
+    cadence: irregular
+    typical_release_lag_days: null
+    refresh_cron: "0 9 1 * *"
+    staleness:
+      warn_after_days: 550
+      fail_after_days: 730
+    steward: TODO
+    # TODO-CONFIRM: EIG is a non-profit, not a government body. Redistribution
+    # terms for the downloadable workbook have not been checked.
+    can_commit_raw: false
+    license: "TODO-CONFIRM"
+    notes: >
+      The committed workbook's panel ends at 2022 and the code filters to
+      max(year), so the indicator is a 2022 vintage regardless of when the file
+      was fetched. Both the asset path and the filename carry years.
+
+  - id: lbnl_interconnection_queue
+    label: "LBNL Queued Up interconnection queue data"
+    feeds: [interconnection_queue]
+    publisher: "Lawrence Berkeley National Laboratory"
+    access_class: file_url
+    endpoint: "https://emp.lbl.gov/sites/default/files/2025-08/LBNL_Ix_Queue_Data_File_thru2024_v2.xlsx"
+    auth_env: null
+    geography: state
+    cadence: annual
+    typical_release_lag_days: 240
+    refresh_cron: "0 9 1 * *"
+    staleness:
+      warn_after_days: 400
+      fail_after_days: 550
+    steward: TODO
+    can_commit_raw: true
+    license: "TODO-CONFIRM: LBNL publications are generally freely available; terms not verified."
+    notes: >
+      The URL embeds both the release month (2025-08) and a file version (_v2),
+      so it changes every release and cannot be treated as stable. A connector
+      needs a discovery step against the Queued Up landing page.
+
+  - id: afdc_station_counts
+    label: "DOE AFDC historical alternative fuelling station counts"
+    feeds: [ev_stations_cap]
+    publisher: "U.S. Department of Energy, Alternative Fuels Data Center"
+    access_class: file_url
+    endpoint: "https://afdc.energy.gov/files/docs/historical-station-counts.xlsx"
+    auth_env: null
+    geography: state
+    cadence: annual
+    typical_release_lag_days: 180
+    refresh_cron: "0 9 1 * *"
+    staleness:
+      warn_after_days: 400
+      fail_after_days: 550
+    steward: TODO
+    can_commit_raw: true
+    license: "Public domain (US Government work)"
+    notes: >
+      The code pins ?year=2024 and reads sheet 2 from row 3, which yields
+      unnamed columns (x1, x2, ...) and then falls back to the last numeric
+      column and names[1] for the state key -- see F-07. The parser needs a
+      column contract before this source can be trusted, let alone automated.
+
+  - id: afdc_ev_registrations
+    label: "DOE AFDC EV registration counts by state"
+    feeds: [evs_per_capita]
+    publisher: "U.S. Department of Energy, Alternative Fuels Data Center"
+    access_class: file_url
+    endpoint: "https://afdc.energy.gov/files/u/data/data_source/10962/10962-ev-registration-counts-by-state_9-06-24.xlsx"
+    auth_env: null
+    geography: state
+    cadence: annual
+    typical_release_lag_days: 250
+    refresh_cron: "0 9 1 * *"
+    staleness:
+      warn_after_days: 400
+      fail_after_days: 550
+    steward: TODO
+    can_commit_raw: true
+    license: "Public domain (US Government work)"
+    notes: >
+      The URL carries a dated filename AND a cache-busting query token
+      (?12518e7893), both of which change per release. The committed file is the
+      2023 registration year. A connector needs a discovery step.
+
+  - id: census_county_population
+    label: "Census county population estimates"
+    feeds: []
+    publisher: "U.S. Census Bureau, Population Estimates Program"
+    access_class: file_url
+    endpoint: "https://www2.census.gov/programs-surveys/popest/datasets/2020-2023/counties/totals/co-est2023-alldata.csv"
+    auth_env: null
+    geography: county-rolled-up
+    cadence: annual
+    typical_release_lag_days: 180
+    refresh_cron: "0 9 1 * *"
+    staleness:
+      warn_after_days: 400
+      fail_after_days: 550
+    steward: TODO
+    can_commit_raw: true
+    license: "Public domain (US Government work)"
+    notes: >
+      Denominator only: supplies PEA population. Currently read from a live URL
+      at script top level with no cache and no guard, ignoring
+      SKIP_DATA_DOWNLOADS -- see F-11. The URL embeds its 2020-2023 vintage.
+
+  - id: census_tiger_states
+    label: "Census TIGER/Line state boundaries (via tigris)"
+    feeds: []
+    publisher: "U.S. Census Bureau"
+    access_class: api
+    endpoint: "https://www2.census.gov/geo/tiger/GENZ2023/shp/"
+    auth_env: null
+    geography: state
+    cadence: annual
+    typical_release_lag_days: 180
+    refresh_cron: "0 9 1 * *"
+    staleness:
+      warn_after_days: 400
+      fail_after_days: 550
+    steward: TODO
+    can_commit_raw: true
+    license: "Public domain (US Government work)"
+    notes: >
+      Geometry only, used for the point-in-polygon assignment of BNEF data
+      centres to states. Fetched at runtime via tigris::states(year = 2023);
+      the year is hard-coded and the call needs network.
+
+  - id: fcc_pea_shapefile
+    label: "FCC Partial Economic Area boundaries"
+    feeds: []
+    publisher: "Federal Communications Commission"
+    access_class: file_url
+    endpoint: "https://transition.fcc.gov/bureaus/oet/info/maps/areas/data/"
+    auth_env: null
+    geography: PEA
+    cadence: static
+    typical_release_lag_days: null
+    refresh_cron: null
+    staleness:
+      warn_after_days: 730
+      fail_after_days: 1095
+    steward: TODO
+    can_commit_raw: true
+    license: "Public domain (US Government work)"
+    notes: >
+      416 PEAs. Geography only. Committed under
+      data/raw/FCC_PEAs_Website/. A second orphan copy of the .shp exists at
+      data/raw/FCC_PEAs_website.shp with no sidecar files and no reader.
+
+  - id: fcc_pea_county_crosswalk
+    label: "FCC PEA-to-county crosswalk"
+    feeds: []
+    publisher: "Federal Communications Commission"
+    access_class: file_url
+    endpoint: "https://transition.fcc.gov/bureaus/oet/info/maps/areas/data/FCC_PEA_website.xlsx"
+    auth_env: null
+    geography: PEA
+    cadence: static
+    typical_release_lag_days: null
+    refresh_cron: null
+    staleness:
+      warn_after_days: 730
+      fail_after_days: 1095
+    steward: TODO
+    can_commit_raw: true
+    license: "Public domain (US Government work)"
+    notes: >
+      Sheet 3 (t_FCC_PEA_Counties) holds 3,236 county rows covering all 416
+      PEAs; FIPS is 5-character text joining to the Census paste0(STATE,
+      COUNTY) key. Verified byte-identical to the FCC original, sha256
+      a1f177239b1adcc793f79e30099d41437290a22fd7c5cd788e708f7626761e94.
+
+  # -- Public, but redistribution terms unverified -------------------------
+
+  - id: clean_investment_monitor
+    label: "Clean Investment Monitor quarterly investment and facility data"
+    feeds:
+      - clean_tech_investment
+      - battery_manufacturing
+      - solar_manufacturing
+      - ev_manufacturing
+    publisher: "Rhodium Group / MIT CEEPR"
+    access_class: manual
+    endpoint: null
+    auth_env: null
+    geography: state
+    cadence: quarterly
+    typical_release_lag_days: 45
+    refresh_cron: null
+    staleness:
+      warn_after_days: 150
+      fail_after_days: 240
+    steward: TODO
+    # TODO-CONFIRM: no licence text ships with the CSVs and the repo is
+    # MIT-licensed. Treated as non-redistributable until confirmed.
+    can_commit_raw: false
+    license: "TODO-CONFIRM"
+    manual_instructions: >
+      Download the quarterly release from cleaninvestmentmonitor.org. Three
+      files are required: quarterly_actual_investment.csv,
+      manufacturing_facility_metadata.csv and socioeconomics.csv. Each carries
+      an embedded `version:` and `created:` line in its header rows -- use the
+      `version:` value as the vintage_label, NOT the directory name.
+    template: data/manual/clean_investment_monitor/TEMPLATE.csv
+    column_contract:
+      quarterly_actual_investment:
+        [Segment, State, Technology, Subcategory, quarter,
+         Estimated_Actual_Quarterly_Expenditure, Decarb_Sector]
+    notes: >
+      Classified `manual` despite being web-published because redistribution
+      terms are unconfirmed; promote to file_url once they are. The committed
+      directory is named q2_2025 but manufacturing_facility_metadata.csv is
+      version 2025_Q4.20260109.0 -- two quarters newer than the other two files
+      (F-09). The facility schema gate also requires two columns the current
+      release does not have, so that path silently falls back.
+
+  # -- Licensed: manual upload lane ----------------------------------------
+
+  - id: bnef_datacenter_capacity
+    label: "BloombergNEF Global Data Center Live IT Capacity Database"
+    feeds: [datacenter_index, datacenter_mw]
+    publisher: "BloombergNEF"
+    access_class: licensed
+    endpoint: null
+    auth_env: null
+    geography: state
+    cadence: quarterly
+    typical_release_lag_days: 60
+    refresh_cron: null
+    staleness:
+      warn_after_days: 150
+      fail_after_days: 240
+    steward: TODO
+    can_commit_raw: false
+    license: "Commercial subscription -- redistribution prohibited"
+    manual_instructions: >
+      Requires a BloombergNEF subscription. Export the Global Data Center Live
+      IT Capacity Database, sheet "Data Centers". Save to the path named in the
+      data-refresh issue; do NOT commit it. Set EIG_MANUAL_DIR to a local
+      directory outside the repository, or use the configured object store.
+    template: data/manual/bnef_datacenter_capacity/TEMPLATE.csv
+    column_contract:
+      data_centers:
+        [Company, Facility Category, "Headline Capacity (MW)",
+         "Under Construction Capacity (MW)", "Committed Capacity (MW)",
+         Latitude, Longitude, Date]
+    notes: >
+      A 37.7 MB copy is currently committed to this public repository -- see
+      F-13, unresolved. The code hard-filters Date == "2025-03-31", so a newer
+      export yields zero rows silently (F-08); select the latest available Date
+      instead and record it as the vintage.
+
+  - id: gjf_subsidy_tracker
+    label: "Good Jobs First Subsidy Tracker (RMI-prepared extract)"
+    feeds: [incentives_gdp]
+    publisher: "Good Jobs First"
+    access_class: licensed
+    endpoint: null
+    auth_env: null
+    geography: state
+    cadence: irregular
+    typical_release_lag_days: null
+    refresh_cron: null
+    staleness:
+      warn_after_days: 550
+      fail_after_days: 730
+    steward: TODO
+    can_commit_raw: false
+    license: "TODO-CONFIRM -- treated as non-redistributable"
+    manual_instructions: >
+      Export from the Good Jobs First Subsidy Tracker. NOTE: the committed file
+      is not a raw download -- columns 36-41 (subs_m, Sector, investment_m and
+      others) are RMI-added derived fields, so a fresh export must be put
+      through the same preparation before it will satisfy the column contract.
+      Whoever owns this source needs to document that preparation step.
+    template: data/manual/gjf_subsidy_tracker/TEMPLATE.csv
+    column_contract:
+      gjf_complete:
+        [Location, Year, Major.Industry.of.Parent,
+         Specific.Industry.of.Parent, subs_m]
+    notes: >
+      Award years in the committed extract run 2021-2024. Divided by BEA SAGDP
+      gdp_2024 to form incentives_gdp. Currently committed to this public
+      repository -- see F-13.
+
+  - id: climate_legislation
+    label: "State climate and energy legislation tracker"
+    feeds: [legislation_index]
+    publisher: "TODO-CONFIRM -- likely Quorum"
+    access_class: licensed
+    endpoint: null
+    auth_env: null
+    geography: state
+    cadence: irregular
+    typical_release_lag_days: null
+    refresh_cron: null
+    staleness:
+      warn_after_days: 550
+      fail_after_days: 730
+    steward: TODO
+    can_commit_raw: false
+    license: "TODO-CONFIRM -- treated as non-redistributable"
+    manual_instructions: >
+      TODO-CONFIRM: retrieval steps cannot be written until the publisher is
+      confirmed. The committed file contains a `quorum_id` column and
+      `source_link` values pointing at state legislature sites, which is
+      in-file evidence of a Quorum export, but that is inference and not a
+      licence. The steward must state where this comes from and how to
+      re-export it.
+    template: data/manual/climate_legislation/TEMPLATE.csv
+    column_contract:
+      climate_leg:
+        [statename, bill_id, bill_type_1, bill_type_2, issue_type_1,
+         issue_type_2, status_type]
+    notes: >
+      2,545 bills across 49 states in the committed file, with no vintage
+      field. status_type is mapped to a weight (679->1, 682->15, ...) with no
+      documented rationale. Currently committed to this public repository.
+
+  # -- Published on a web page, no bulk file: manual ------------------------
+
+  - id: sia_semiconductor_investment
+    label: "SIA chip supply-chain investment announcements"
+    feeds: [semiconductor_investment, semiconductor_manufacturing]
+    publisher: "Semiconductor Industry Association"
+    access_class: scrape
+    endpoint: "https://www.semiconductors.org/chip-supply-chain-investments/"
+    auth_env: null
+    geography: state
+    cadence: irregular
+    typical_release_lag_days: null
+    refresh_cron: null
+    staleness:
+      warn_after_days: 550
+      fail_after_days: 730
+    steward: TODO
+    can_commit_raw: false
+    license: "TODO-CONFIRM"
+    manual_instructions: >
+      The SIA publishes announcements as a web page, not a downloadable file.
+      The committed semiconductor_man.csv is a hand-compiled table with
+      per-project source links. Re-compile against the SIA page, preserving the
+      existing columns; 43 of 140 rows currently have "Not Available" in
+      Project Size ($) and parse to NA.
+    template: data/manual/sia_semiconductor_investment/TEMPLATE.csv
+    column_contract:
+      semiconductor_man:
+        [Company, State, LAT, LON, Category, "Project Size ($)"]
+    notes: >
+      140 projects across 29 states in the committed file, undated. URL
+      recorded as a comment in the legacy script rather than in any config.
+
+  - id: cnbc_state_rankings
+    label: "CNBC America's Top States for Business -- infrastructure sub-rank"
+    feeds: [cnbc_rank]
+    publisher: "CNBC"
+    access_class: scrape
+    endpoint: null
+    auth_env: null
+    geography: state
+    cadence: annual
+    typical_release_lag_days: null
+    refresh_cron: null
+    staleness:
+      warn_after_days: 400
+      fail_after_days: 550
+    steward: TODO
+    can_commit_raw: false
+    license: "Editorial content -- redistribution not permitted"
+    manual_instructions: >
+      CNBC publishes the rankings as an article each year. Transcribe the
+      INFRASTRUCTURE sub-rank per state. Record the ranking year explicitly in
+      the filename: the committed file has no year column at all, so its
+      vintage cannot be determined from the data.
+    template: data/manual/cnbc_state_rankings/TEMPLATE.csv
+    column_contract:
+      cnbc_bus_rankings: [STATE, "INFRA- STRUCTURE"]
+    notes: >
+      50 rows, vintage undeterminable. Reversed in the infrastructure
+      sub-index, since a lower rank number is better.
+
+  # -- Derived from internal RMI analysis ----------------------------------
+
+  - id: rmi_feasibility
+    label: "RMI industry feasibility model output"
+    feeds: [feasibility_index, industry_feasibility]
+    publisher: "RMI (internal analysis)"
+    access_class: derived
+    endpoint: null
+    auth_env: null
+    geography: state
+    cadence: irregular
+    typical_release_lag_days: null
+    refresh_cron: null
+    staleness:
+      warn_after_days: 550
+      fail_after_days: 730
+    steward: TODO
+    can_commit_raw: false
+    license: "RMI internal"
+    manual_instructions: >
+      Regenerated from internal RMI analysis, not retrieved. The legacy script
+      references a commented path ending
+      ClimateandEconomicJusticeTool/feasibility_geo.csv, filtered to
+      geo == "State" and aggregation_level == 4, weighted by pci. The steward
+      owns re-running that analysis and exporting industry_feas_perc per state.
+    template: data/manual/rmi_feasibility/TEMPLATE.csv
+    column_contract:
+      feasibility: [state, industry_feas_perc]
+    notes: >
+      No producer exists in this repository. Both indicators currently hold
+      sample data only -- 3 of 50 states.
+
+  - id: nrel_supply_curve
+    label: "Renewable technical potential index (from NREL supply curve)"
+    feeds: [renewable_potential]
+    publisher: "RMI (internal analysis, from NREL supply curve data)"
+    access_class: derived
+    endpoint: null
+    auth_env: null
+    geography: state
+    cadence: irregular
+    typical_release_lag_days: null
+    refresh_cron: null
+    staleness:
+      warn_after_days: 550
+      fail_after_days: 730
+    steward: TODO
+    can_commit_raw: false
+    license: "TODO-CONFIRM -- NREL source data is public domain; the derived index is RMI internal"
+    manual_instructions: >
+      The legacy script comments that this is "calculated in All Geos", i.e. in
+      a script that is not in this repository. The steward owns producing a
+      per-state renewable potential index and documenting which supply-curve
+      metrics are treated as good-direction versus bad-direction, since the
+      legacy code reverses the first three numeric columns positionally.
+    template: data/manual/nrel_supply_curve/TEMPLATE.csv
+    column_contract:
+      supplycurve: [state, ren_index]
+    notes: >
+      No producer exists in this repository. Currently sample data only.
+
+  - id: rmi_employment_lq
+    label: "Electro-industrial employment location quotient"
+    feeds: [employment_lq]
+    publisher: "RMI (internal analysis, from BLS/OEWS data)"
+    access_class: derived
+    endpoint: null
+    auth_env: null
+    geography: state
+    cadence: annual
+    typical_release_lag_days: null
+    refresh_cron: null
+    staleness:
+      warn_after_days: 400
+      fail_after_days: 550
+    steward: TODO
+    can_commit_raw: false
+    license: "RMI internal"
+    manual_instructions: >
+      The legacy script reads an undefined `bundle_lq` object, so the
+      calculation lives outside this repository. The steward owns producing a
+      per-state location quotient for the electro-industrial NAICS bundle and
+      documenting which codes that bundle contains.
+    template: data/manual/rmi_employment_lq/TEMPLATE.csv
+    column_contract:
+      employment_lq: [state_abbr, LQ_bundle]
+    notes: >
+      No producer exists in this repository. Currently sample data only.
+      Distinct from bls_qcew, which feeds workforce_share and workforce_growth.
+
+  # -- Statutory or hand-researched: low cadence, high review burden -------
+
+  - id: cpcn_requirements
+    label: "Certificate of Public Convenience and Necessity requirements by state"
+    feeds: [cpcn]
+    publisher: "RMI (statutory research)"
+    access_class: static
+    endpoint: null
+    auth_env: null
+    geography: state
+    cadence: static
+    typical_release_lag_days: null
+    refresh_cron: null
+    staleness:
+      warn_after_days: 730
+      fail_after_days: 1095
+    steward: TODO
+    can_commit_raw: true
+    license: "RMI internal (compilation of public statute)"
+    manual_instructions: >
+      Review each state's utility-scale siting statute and record whether a
+      CPCN is required. REVIEW REQUIRED BEFORE THE NEXT PUBLISHED VINTAGE: the
+      committed file is named CPCN_Requirements_and_Enactment_Years_by_State_GPT.csv
+      -- the _GPT suffix is in-repo evidence that it was generated by a language
+      model rather than compiled from statute, and the pipeline converts it
+      straight into a regulatory-friction score with no review step. Each row
+      needs a statutory citation.
+    template: data/manual/cpcn_requirements/TEMPLATE.csv
+    column_contract:
+      cpcn: [State, "CPCN Required for Utility-Scale Projects", "Year Requirement Started"]
+    notes: >
+      50 states, undated. Mapped to 0.75 when "No" and 0.25 otherwise. See
+      docs/data_audit.md A-4.
+
+  - id: state_sepa
+    label: "State Environmental Policy Act analogue presence"
+    feeds: [sepa]
+    publisher: "RMI (statutory research)"
+    access_class: static
+    endpoint: null
+    auth_env: null
+    geography: state
+    cadence: static
+    typical_release_lag_days: null
+    refresh_cron: null
+    staleness:
+      warn_after_days: 730
+      fail_after_days: 1095
+    steward: TODO
+    can_commit_raw: true
+    license: "RMI internal (compilation of public statute)"
+    manual_instructions: >
+      Record 0/1 per state for whether a state-level environmental policy act
+      analogue exists. Add a statutory citation column: the committed file is
+      two columns of 0/1 with no citations and no date.
+    template: data/manual/state_sepa/TEMPLATE.csv
+    column_contract:
+      state_sepa: [state, has_sepa]
+    notes: "50 states, undated. See docs/data_audit.md A-6."
+
+  # -- Origin not determinable from this repository ------------------------
+  # Each of these feeds a live indicator. They stay `unknown` -- and therefore
+  # manual -- until a human states what the source is. An honest unknown with
+  # an owner and a deadline beats a wrong automated guess.
+
+  - id: spot_gap_analysis
+    label: "SPOT policy score (50 State Gap Analysis workbook)"
+    feeds: [spot_score]
+    publisher: "TODO-CONFIRM -- unidentified"
+    access_class: unknown
+    endpoint: null
+    auth_env: null
+    geography: state
+    cadence: null
+    typical_release_lag_days: null
+    refresh_cron: null
+    staleness:
+      warn_after_days: 550
+      fail_after_days: 730
+    steward: TODO
+    can_commit_raw: false
+    license: "TODO-CONFIRM"
+    manual_instructions: >
+      TODO-CONFIRM: cannot be written until the publisher is known.
+      data/README.md calls this the "SPOT Index" and marks it Public, but no
+      URL, publisher or organisation appears anywhere in the code, the workbook
+      carries no provenance metadata, and the legacy script's only reference is
+      the tautology `spot <- spot`. One worksheet per state of Yes/No/Partial
+      answers, averaged into a score.
+    template: data/manual/spot_gap_analysis/TEMPLATE.csv
+    column_contract:
+      spot: [state, spot_score]
+    notes: "See docs/data_audit.md A-1."
+
+  - id: dsire_policy_count
+    label: "DSIRE state policy count"
+    feeds: [dsire_policy_count]
+    publisher: "TODO-CONFIRM -- docs claim DSIRE; no code produces it"
+    access_class: unknown
+    endpoint: null
+    auth_env: null
+    geography: state
+    cadence: null
+    typical_release_lag_days: null
+    refresh_cron: null
+    staleness:
+      warn_after_days: 550
+      fail_after_days: 730
+    steward: TODO
+    can_commit_raw: false
+    license: "TODO-CONFIRM"
+    manual_instructions: >
+      TODO-CONFIRM: no retrieval path exists. The legacy script reads an
+      undefined `dsire_inc` object and nothing in scripts/ or R/ produces this
+      indicator, so it can only ever have arrived via data/inputs.csv -- a file
+      that does not exist in this repository. If the intended source is the
+      DSIRE database at ncsolarcen-prod.s3.amazonaws.com, that needs
+      confirming and wiring up.
+    template: data/manual/dsire_policy_count/TEMPLATE.csv
+    column_contract:
+      dsire: [state, dsire_policy_count]
+    notes: "Currently sample data only -- 3 of 50 states."
+
+  - id: dev_program_db
+    label: "State economic development programme inventory (dbo_Program)"
+    feeds: [dev_policy_count]
+    publisher: "TODO-CONFIRM -- unidentified"
+    access_class: unknown
+    endpoint: null
+    auth_env: null
+    geography: state
+    cadence: null
+    typical_release_lag_days: null
+    refresh_cron: null
+    staleness:
+      warn_after_days: 550
+      fail_after_days: 730
+    steward: TODO
+    can_commit_raw: false
+    license: "TODO-CONFIRM"
+    manual_instructions: >
+      TODO-CONFIRM: cannot be written until the publisher is known. The dbo_
+      prefix indicates a SQL Server table export, and the columns (ProgramCap,
+      LegalCitation, ReportingRequirement, ProgramObjective, administrator
+      contact fields) describe a state business-incentive programme inventory.
+      This is deliberately NOT attributed to a vendor. The steward must state
+      what it is and whether it may be redistributed.
+    template: data/manual/dev_program_db/TEMPLATE.csv
+    column_contract:
+      dbo_program: [State, Program_Name, Program_Status, ProgramDescription]
+    notes: >
+      7.1 MB, currently committed to this public repository -- see F-13.
+      Filtered on a 20-term keyword list against ProgramDescription and counted
+      per state. See docs/data_audit.md A-2.
+
+  - id: solar_ordinances
+    label: "Local solar ordinance records"
+    feeds: [ordinance]
+    publisher: "TODO-CONFIRM -- unidentified"
+    access_class: unknown
+    endpoint: null
+    auth_env: null
+    geography: county-rolled-up
+    cadence: null
+    typical_release_lag_days: null
+    refresh_cron: null
+    staleness:
+      warn_after_days: 550
+      fail_after_days: 730
+    steward: TODO
+    can_commit_raw: false
+    license: "TODO-CONFIRM"
+    manual_instructions: >
+      TODO-CONFIRM: cannot be written until the publisher is known.
+      data/README.md calls this an internal compilation, but the schema
+      (Feature Type, Value Type, Value, Citation, Original Captured Date,
+      Update Status) resembles a published local-ordinance database. Candidate
+      upstreams are the NREL and Sabin Center ordinance databases; neither is
+      referenced in the code.
+    template: data/manual/solar_ordinances/TEMPLATE.csv
+    column_contract:
+      solar_ordinances: [State, County, "Feature Type", Citation, "Ordinance Year"]
+    notes: >
+      1,412 rows covering only 34 of 50 states, ordinance years 2009-2021. The
+      16 missing states are NA rather than zero, and rowmean_index() drops them,
+      so their ease_index is computed from three indicators instead of four --
+      see docs/refactor_plan.md 3.9. See also docs/data_audit.md A-5.
+
+  - id: regdata_subnational
+    label: "RegData subnational regulatory restrictions"
+    feeds: [regdata_index]
+    publisher: "Mercatus Center / QuantGov"
+    access_class: unknown
+    endpoint: null
+    auth_env: null
+    geography: state
+    cadence: irregular
+    typical_release_lag_days: null
+    refresh_cron: null
+    staleness:
+      warn_after_days: 550
+      fail_after_days: 730
+    steward: TODO
+    can_commit_raw: false
+    license: "TODO-CONFIRM"
+    manual_instructions: >
+      The publisher is named in docs/sources.md but NO endpoint is recorded
+      anywhere in this repository, so this cannot be automated as things stand.
+      TODO-CONFIRM the download location on quantgov.org, then promote this
+      entry to file_url.
+    template: data/manual/regdata_subnational/TEMPLATE.csv
+    column_contract:
+      regdata: [Country, Jurisdiction, "Year of Period Code", Restrictions, Words]
+    notes: >
+      Period codes 2020-2022 in the committed file, 50 US jurisdictions.
+      access_class is `unknown` rather than `file_url` because a named
+      publisher without a recorded endpoint is not an automatable source.
+
+  # -- Feeds map/chart outputs only, not an index indicator -----------------
+
+  - id: drone_facility_announcements
+    label: "US drone manufacturing facility announcements"
+    feeds: []
+    publisher: "RMI (compiled from press sources)"
+    access_class: manual
+    endpoint: null
+    auth_env: null
+    geography: state
+    cadence: irregular
+    typical_release_lag_days: null
+    refresh_cron: null
+    staleness:
+      warn_after_days: 550
+      fail_after_days: 730
+    steward: TODO
+    can_commit_raw: true
+    license: "RMI internal compilation"
+    manual_instructions: >
+      Hand-compiled from press announcements; the Source column cites AP News,
+      Site Selection and JobsOhio. TODO-CONFIRM whether this source should be
+      retained at all: it feeds outputs/pea_electro.csv and the facility map
+      but no index indicator, and only 5 of its 12 rows survive into the PEA
+      rollup because most lack coordinates.
+    template: data/manual/drone_facility_announcements/TEMPLATE.csv
+    column_contract:
+      drones: [Company, "Facility/Project", Investment_USD_millions, State,
+               Latitude, Longitude, Announcement_Date, Source]
+    notes: "Announcements 2022-2025, 12 rows."
