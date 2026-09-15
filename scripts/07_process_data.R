@@ -181,8 +181,21 @@ load_quarterly_gdp_growth <- function(raw_dir, states) {
       
 county_pop <- readr::read_csv('https://www2.census.gov/programs-surveys/popest/datasets/2020-2023/counties/totals/co-est2023-alldata.csv')
 
+# FCC PEA-to-county crosswalk, sheet 3 (`t_FCC_PEA_Counties`): 3,236 county rows
+# covering all 416 PEAs. Source:
+# https://transition.fcc.gov/bureaus/oet/info/maps/areas/data/FCC_PEA_website.xlsx
+# US Government work, so the workbook is committed alongside the PEA shapefile
+# it joins to. Guarded because an unguarded read here aborts the whole pipeline
+# at top level, before a single indicator is built.
 pea_county_path <- fs::path(raw_dir, "FCC_PEA_website.xlsx")
-pea_counties <- read_excel(pea_county_path,3)
+if (!fs::file_exists(pea_county_path)) {
+  rlang::abort(c(
+    glue::glue("Required PEA county crosswalk not found: {pea_county_path}"),
+    i = "Download it from https://transition.fcc.gov/bureaus/oet/info/maps/areas/data/FCC_PEA_website.xlsx",
+    i = glue::glue("and save it as {pea_county_path}")
+  ))
+}
+pea_counties <- read_excel(pea_county_path, 3)
 
 pea_pop <- pea_counties %>%
   left_join(
@@ -894,6 +907,11 @@ semiconductor_manufacturing <- ensure_optional_numeric(semiconductor_manufacturi
 cluster_manufacturing <- NULL
 cluster_pea_manufacturing <- NULL
 cluster_pea_clean_electric_capacity_growth <- NULL
+# Assigned only inside the CIM facility block below, whose schema gate
+# currently fails (docs/refactor_plan.md F-09). Initialised here so the
+# `!is.null(cim_facilities)` test further down does not raise
+# "object not found", matching how elec_fac/datacenter_fac/semi_fac are handled.
+cim_facilities <- NULL
 
 facility_path <- fs::path(raw_dir, "clean_investment_monitor_q2_2025", "manufacturing_facility_metadata.csv")
 facility_raw <- read_optional_csv_skip(facility_path, skip = 4)
@@ -1118,10 +1136,14 @@ if (nrow(electrotech_fac) > 0) {
 
 if (nrow(electrotech_fac) > 0) {
   # PEA aggregation for regional cluster views.
+  # `total` is the sum of the per-category columns produced by pivot_wider, whose
+  # names depend on which categories are present. The previous positional range
+  # `Datacenter:ev_manufacturing` failed outright (ev_manufacturing is absent
+  # whenever the CIM facility path is skipped) and, even when it resolved, would
+  # silently omit any category sorting before Datacenter -- "Solar Generation",
+  # the second largest, among them. Select by type instead of by position.
   pea_electro <- build_pea_facility_rollup(electrotech_fac, pea_sf, pea_pop) %>%
-    rowwise() %>%
-    dplyr::mutate(total = sum(dplyr::c_across(`Datacenter`:`ev_manufacturing`), na.rm = TRUE)) %>%
-    dplyr::ungroup()
+    dplyr::mutate(total = rowSums(dplyr::pick(dplyr::where(is.numeric)), na.rm = TRUE))
 
   readr::write_csv(pea_electro, fs::path(paths$processed_dir, "pea_electro.csv"))
   readr::write_csv(
@@ -1494,10 +1516,12 @@ if (is.null(cluster_pea_inputs) || nrow(cluster_pea_inputs) == 0) {
 
         pea_sf <- sf::st_make_valid(pea_sf)
 
+        # This block re-reads the shapefile, so `economic_area` does not exist yet
+        # and must be derived from the PEA name column -- as the equivalent code
+        # above already does.
         pea_sf <- pea_sf %>%
           sf::st_transform(4326) %>%
-          dplyr::mutate(economic_area = as.character(economic_area)) %>%
-          dplyr::select(.data$economic_area)
+          dplyr::transmute(economic_area = as.character(.data[[pea_name_col]]))
 
         pea_points <- elec_fac %>%
           dplyr::filter(!is.na(.data$Longitude), !is.na(.data$Latitude)) %>%
@@ -1540,6 +1564,10 @@ if (is.null(cluster_pea_manufacturing)) {
   cluster_pea_inputs <- cluster_pea_inputs %>%
     dplyr::left_join(
       cluster_pea_manufacturing %>%
+        # `state` is already carried by cluster_pea_inputs and is not a join key
+        # here. Without dropping it the join yields state.x / state.y, and
+        # build_state_cluster_from_pea() then aborts on a missing `state`.
+        dplyr::select(-dplyr::any_of("state")) %>%
         dplyr::rename(
           battery_manufacturing_cim = .data$battery_manufacturing,
           solar_manufacturing_cim = .data$solar_manufacturing,
