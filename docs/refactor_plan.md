@@ -26,7 +26,9 @@ Severity is about the published index, not about code tidiness.
 | [F-07](#f-07) | medium | The AFDC station-count parser reads unnamed columns positionally | Phase 2 |
 | [F-08](#f-08) | medium | The BNEF snapshot date is hard-coded, so a refreshed file yields zero rows | Phase 3 |
 | [F-09](#f-09) | medium | One CIM directory holds two different release vintages, and the facility schema gate fails silently | Phase 1 / 2 |
-| [F-10](#f-10) | medium | `FCC_PEA_website.xlsx` is read but untracked and unregistered | Phase 3 |
+| [F-10](#f-10) | medium | `FCC_PEA_website.xlsx` is read but untracked and unregistered | ✅ fixed in step 0c |
+| [F-20](#f-20) | **high** | The manufacturing fallback joins on the wrong key type, so three cluster indicators silently keep sample data | issue → separate PR |
+| [F-21](#f-21) | medium | A PEA spanning a state border emits duplicate `economic_area` rows | needs your decision |
 | [F-11](#f-11) | medium | Live network reads sit at script top level, breaking the no-network CI rule | Phase 2 |
 | [F-12](#f-12) | **high** | 19 of 21 staged EIA-860M workbooks are byte-identical HTML error pages; three are committed | Phase 2 |
 | [F-13](#f-13) | **governance** | Licensed third-party raw data is committed to a public MIT-licensed repository | needs your decision |
@@ -465,8 +467,46 @@ indicator is built. It supplies the PEA↔county crosswalk that produces PEA pop
 
 A sibling file, `pea_counties_FCC.xlsx`, is also present and untracked but referenced by no code.
 
-**Remedy.** Register it, track it if FCC terms permit (it is a US government work, so almost
-certainly yes), and guard the read. Phase 3 drop-zone work.
+**Remedy — landed in step 0c.** The source URL is
+`https://transition.fcc.gov/bureaus/oet/info/maps/areas/data/FCC_PEA_website.xlsx`. Downloaded and
+compared against the untracked local copy: **byte-identical**, SHA-256
+`a1f177239b1adcc793f79e30099d41437290a22fd7c5cd788e708f7626761e94`, 137,797 bytes, valid xlsx.
+Sheet 3 (`t_FCC_PEA_Counties`) holds 3,236 county rows covering all 416 PEAs, matching the
+shapefile exactly, with `FIPS` as 5-character text that joins to the Census `paste0(STATE, COUNTY)`
+key.
+
+FCC is a federal agency, so this is a US Government work and redistributable. The file is now
+committed alongside the PEA shapefile it joins to, registered in `ingest_legacy_sources()` so it
+appears in `source_inventory.csv`, and the read is guarded with an error naming the URL and target
+path rather than aborting with a bare `path does not exist`.
+
+**Four further defects surfaced only once the pipeline could reach them** — each was invisible while
+it died at line 185, and each is fixed in step 0c:
+
+1. **`object 'cim_facilities' not found`.** Predicted in F-09 as a latent consequence. Assigned only
+   inside the gated CIM block, referenced unconditionally at
+   [`:1085`](../scripts/07_process_data.R#L1085). Initialised to `NULL` alongside its siblings.
+2. **`c_across(Datacenter:ev_manufacturing)` aborts.** `ev_manufacturing` is a category only the
+   skipped CIM path produces. Worse, the range is positional over `pivot_wider` output, so even when
+   it resolved it silently omitted every category sorting before `Datacenter` — including
+   "Solar Generation", the second largest by facility count. Replaced with a type-based selection.
+3. **`object 'economic_area' not found`.** In the region described in 3.3, which re-reads the
+   shapefile and then references `economic_area` before deriving it. Now derived from
+   `pea_name_col`, as the equivalent code above already does.
+4. **Join suffix collision.** `cluster_pea_manufacturing` also carries `state`, and the join at
+   [`:1530`](../scripts/07_process_data.R#L1530) renames only the three manufacturing columns — so
+   `state` became `state.x`/`state.y` and `build_state_cluster_from_pea()` aborted on a missing
+   `state`. `state` is now dropped before the join.
+
+Plus one outside `07_process_data.R`: **`build_audit_table()` assumed every output table is keyed on
+`state` + `abbr` with numeric values**, but `cluster_pea` and the PEA index are keyed on
+`economic_area` (the latter has no `abbr`), and `incentives_by_sector_year` carries `year` and
+`sector`. Pivoting `-c(state, abbr)` tried to combine character keys with numeric values. It now
+pivots numeric columns explicitly, keeping whichever identifiers each table has.
+
+**Result: `Rscript run_pipeline.R` completes, exit code 0, all 14 outputs written** — 50 states, no
+`NA`s in any sub-index, every sub-index inside [0, 1]. See F-20 and F-21 for what the run then
+revealed about the *content*.
 
 ---
 
@@ -811,6 +851,83 @@ lockfile on Windows for an Ubuntu runner is how you get a lockfile that fails di
 
 ---
 
+<a id="f-20"></a>
+### F-20 — The manufacturing fallback joins on the wrong key type *(high — affects published values)*
+
+Found by running the pipeline end to end for the first time, in step 0c.
+
+`battery_manufacturing`, `solar_manufacturing` and `ev_manufacturing` come from
+`cluster_manufacturing`, built either from the CIM facility metadata or — because that path's schema
+gate fails (F-09) — from the `quarterly_actual_investment.csv` fallback at
+[`07_process_data.R:977-1010`](../scripts/07_process_data.R#L977). Both paths end with the same
+transmute:
+
+```r
+dplyr::left_join(states, by = c("state" = "abbr")) %>%
+dplyr::transmute(state = dplyr::coalesce(.data$state.y, .data$state), ...)
+```
+
+which emits `state` as a **full state name**. But `raw_updates` joins that table with
+[`:1288`](../scripts/07_process_data.R#L1288):
+
+```r
+safe_left_join(cluster_manufacturing, by = c("abbr" = "state"))
+```
+
+— matching the two-letter `abbr` against full names. Verified against the committed CIM release:
+
+```
+quarterly fallback rows matching: 1659   distinct states: 35
+resulting `state` values: Alabama, Arkansas, Arizona, California, ...
+match count against abbr: 0 of 35
+```
+
+**Zero rows join.** All three indicators silently fall back to whatever `base_inputs` supplied,
+which under the CI configuration is the three sample rows. Confirmed in the output of a full run:
+they sit at **3/50 non-NA**, alongside the eight already documented.
+
+This affects **both** source paths, so fixing F-09's schema gate alone would not repair it.
+
+**It is a regression.** The committed `inputs_processed.csv` has these three at **35/50**, exactly
+matching the 35 states the fallback yields — so an earlier version of this code joined correctly.
+Same pattern as F-04: a refactor broke a working join and nothing caught it, because the pipeline
+that would have revealed it no longer ran.
+
+**Remedy.** Join on a consistent key. Not done in step 0c: like F-04 and F-05 this moves published
+numbers for three cluster indicators, so it belongs in its own PR with a diff report.
+
+**Revised count.** With the pipeline actually executing, **11 of 33 indicators carry only
+California / Texas / New York sample values**, not the eight recorded during Phase 0. The three
+additions are precisely these. `data_audit.md` §5.4 was measured from the committed
+`inputs_processed.csv`, which predates the regression.
+
+---
+
+<a id="f-21"></a>
+### F-21 — A PEA spanning a state border emits duplicate rows *(medium — needs your decision)*
+
+`pea_indicator_rollup` groups by `(economic_area, state_abbr)`
+([`07_process_data.R:1422`](../scripts/07_process_data.R#L1422)), so a PEA whose facilities fall in
+more than one state produces one row per state. Nothing downstream deduplicates, so
+`outputs/Electro-Industrial_pea.csv` carries both:
+
+```
+economic_area      state
+Yuma, AZ           California
+Yuma, AZ           Arizona
+```
+
+The PEA output has 402 rows against 416 distinct PEAs in the FCC shapefile, and 51 distinct `state`
+values against the 50 in the state-level output.
+
+**The question is definitional, not technical:** is a PEA a single geography that belongs to one
+state, or a geography that can be split across states? Either answer is defensible and each implies
+a different fix (assign each PEA to its dominant state, or key every PEA output on
+`economic_area + state` and say so in the data dictionary). Because it determines what a row of the
+PEA index *means*, it is a methodology decision and I have not made it.
+
+---
+
 ## Part 2 — The brief's structural hypotheses, confirmed or refuted
 
 ### 1. Committed OneDrive tree — **CONFIRMED (portability), and it is dead code**
@@ -1145,7 +1262,8 @@ This departs from the brief in one respect, and only one: **two blockers land be
 |---|---|---|
 | **0a** ✅ | Fix F-01 (two brace defects) and F-16 (undeclared packages) + `scripts/check_syntax.R` in CI | the pipeline must parse before anything can report on it; these were two independent blockers |
 | **0b** ✅ | Fix F-03 (test wd + fixture) and unblock F-19 (invalid `renv.lock`) | CI must be able to go green before a scheduled job starts filing issues |
-| **0c** | Make the smoke test pass: F-10 (untracked `FCC_PEA_website.xlsx`) and F-11 (unguarded live reads), plus whatever the first full run surfaces | step 0a makes the file *parse*; it does not make `Rscript run_pipeline.R` *succeed* |
+| **0c** ✅ | Make the pipeline complete: F-10 plus four further defects only a full run could surface (see below) | step 0a made the file *parse*; this makes `Rscript run_pipeline.R` *succeed* |
+| **0d** | F-11 (unguarded live Census read ignores `SKIP_DATA_DOWNLOADS`) | required by the brief's "CI must pass with no network access"; not yet a CI failure because runners have network |
 | **1** | Phase 1 as briefed — `sources.yml`, manifest, freshness engine, notifier | delivers value with zero connectors; the orphan check alone would have caught F-05 |
 | **1b** | Issues for F-04, F-05 (each its own PR, each with a diff report) | both move published numbers; needs your sign-off on F-04's bug-vs-methodology framing |
 | **2** | Phase 2 connectors, in the §5.2 shortlist order, 2–3 per PR | F-06, F-07, F-11, F-12 are fixed as part of the connectors that own those sources |

@@ -6,22 +6,38 @@
 #' @return Long-form audit tibble.
 #' @export
 build_audit_table <- function(raw_inputs, indices, definition = NULL) {
-  raw_long <- raw_inputs %>%
-    tidyr::pivot_longer(
-      cols = -c(state, abbr),
-      names_to = "variable",
-      values_to = "value"
-    ) %>%
-    dplyr::mutate(category = "raw", data_type = "raw")
+  # The output tables are not all shaped alike: cluster_pea and the PEA index are
+  # keyed on `economic_area` (and the latter has no `abbr` at all), while
+  # incentives_by_sector_year carries `year` and `sector`. Pivoting
+  # `-c(state, abbr)` therefore tried to combine character keys with numeric
+  # values and aborted with "Can't combine `economic_area` <character> and
+  # `workforce_share` <double>". Pivot the numeric columns explicitly instead,
+  # keeping whichever identifier columns a given table actually has.
+  key_cols <- c("state", "abbr", "economic_area")
 
-  index_long <- purrr::imap_dfr(indices, function(df, name) {
+  pivot_long <- function(df, name, data_type) {
+    if (is.null(df) || nrow(df) == 0) {
+      return(NULL)
+    }
+    keys <- intersect(key_cols, names(df))
+    value_cols <- names(df)[vapply(df, is.numeric, logical(1))]
+    if (length(keys) == 0 || length(value_cols) == 0) {
+      return(NULL)
+    }
     df %>%
+      dplyr::select(dplyr::all_of(c(keys, value_cols))) %>%
       tidyr::pivot_longer(
-        cols = -c(state, abbr),
+        cols = dplyr::all_of(value_cols),
         names_to = "variable",
         values_to = "value"
       ) %>%
-      dplyr::mutate(category = name, data_type = "index")
+      dplyr::mutate(category = name, data_type = data_type)
+  }
+
+  raw_long <- pivot_long(raw_inputs, "raw", "raw")
+
+  index_long <- purrr::imap_dfr(indices, function(df, name) {
+    pivot_long(df, name, "index")
   })
 
   combined <- dplyr::bind_rows(raw_long, index_long)

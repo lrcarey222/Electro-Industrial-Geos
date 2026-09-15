@@ -26,7 +26,12 @@ ingest_legacy_sources <- function(paths, snapshot_date, skip_downloads = FALSE) 
     "Downloads/state_business_cycle_status.csv",
     "Downloads/us_drone_facility_announcements_2022_2025.csv",
     "egrid2023_data_metric_rev2.xlsx",
-    "table_8.xlsx"
+    "table_8.xlsx",
+    # FCC PEA-to-county crosswalk, required by every PEA-level output.
+    # https://transition.fcc.gov/bureaus/oet/info/maps/areas/data/FCC_PEA_website.xlsx
+    "FCC_PEA_website.xlsx",
+    # Companion PEA boundaries for the same crosswalk.
+    "FCC_PEAs_Website/FCC_PEAs_website.shp"
   )
 
   generator_reference_date <- Sys.Date()
