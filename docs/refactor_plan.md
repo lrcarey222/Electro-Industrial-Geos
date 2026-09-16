@@ -18,7 +18,8 @@ Severity is about the published index, not about code tidiness.
 | id | severity | finding | phase / status |
 |---|---|---|---|
 | [F-01](#f-01) | **blocker** | The pipeline does not run: `scripts/07_process_data.R` fails to parse | ✅ fixed in step 0a |
-| [F-02](#f-02) | **blocker** | The canonical methodology script does not parse and is not self-contained | Phase 5 (blocks parity test) |
+| [F-02](#f-02) | **blocker** | The canonical methodology script does not parse and is not self-contained | ⚠️ **reopened** — a working upstream was found, see [`legacy_parity.md`](legacy_parity.md) |
+| [F-22](#f-22) | **high** | The refactor doubled the employment NAICS bundle; fixing F-05 would ship that silently | needs your decision **before** F-05 |
 | [F-03](#f-03) | **high** | The test suite executes zero assertions; the one parity check compares against `NULL` | ✅ fixed in step 0b |
 | [F-04](#f-04) | **high** | EIA electricity price reads the **residential** column, not industrial — a regression against the committed vintage | issue → separate PR |
 | [F-05](#f-05) | **high** | `industrial_electricity_price` is joined under the wrong column name, so the indicator keeps sample data | issue → separate PR |
@@ -985,6 +986,35 @@ state, or a geography that can be split across states? Either answer is defensib
 a different fix (assign each PEA to its dominant state, or key every PEA output on
 `economic_area + state` and say so in the data dictionary). Because it determines what a row of the
 PEA index *means*, it is a methodology decision and I have not made it.
+
+---
+
+<a id="f-22"></a>
+### F-22 — The refactor doubled the employment NAICS bundle *(high — needs a decision before F-05)*
+
+Found by comparing this repo against the upstream it was copied from; full detail in
+[`legacy_parity.md` §4](legacy_parity.md).
+
+The upstream `electric_man` bundle is **19 six-digit NAICS codes**, all 334xxx / 335xxx —
+electrical equipment and electronic component manufacturing. This repo's `electric_man_6d`
+([`07_process_data.R:1137-1141`](../scripts/07_process_data.R#L1137)) is **39 codes**: the same 19
+plus 10 utilities codes (`221111`–`221121`, electric power generation) and 10 telecom and
+broadcasting codes (`513322`, `515210`, `517210`, `517910`, …). Nothing was dropped.
+
+So the concept changed from *electrical equipment manufacturing* to *manufacturing + utilities +
+telecom*, and line 1142 then truncates to four digits, which admits every 6-digit child and widens
+it further still.
+
+**It has not surfaced in published numbers yet** only because `electric_man_6d` feeds
+`workforce_share` and `workforce_growth`, both of which F-05 discards before they reach the index.
+**That is the danger:** fixing F-05 activates this bundle, and `cluster` would begin measuring a
+materially different concept with no decision taken and nothing written down —
+`docs/methodology.md` still describes the narrow definition.
+
+**Remedy: decide, then fix F-05 — in that order.** Is the electro-industrial workforce electrical
+equipment manufacturing, or that plus utilities and telecom? Both are defensible; only the first is
+documented. Whichever is chosen, `docs/methodology.md` and `config/index_definition.yml` should say
+so explicitly, because the current state is a constant in a script disagreeing with the prose.
 
 ---
 
