@@ -1,0 +1,291 @@
+name: data-freshness
+
+# Weekly staleness check. Its job is to make sure no source can go quietly out
+# of date: every source past its SLA gets a specific, actionable issue assigned
+# to a named human.
+#
+# One issue per source, reused forever. The stable title
+# "[data-refresh] <source_id> — <label>" plus the `data-refresh` label is the
+# deduplication key, so a source that has been stale for six months has one
+# issue with a comment history, not twenty-six issues.
+
+on:
+  schedule:
+    # 08:00 America/Los_Angeles on Mondays. GitHub cron is UTC only and does not
+    # observe DST, so this fires at 08:00 PDT and 07:00 PST. Close enough for a
+    # weekly check; do not add a second cron to "fix" it, that just double-fires
+    # for part of the year.
+    - cron: "0 15 * * 1"
+  workflow_dispatch:
+    inputs:
+      as_of:
+        description: "Evaluate staleness as of this date (YYYY-MM-DD). Blank = today."
+        required: false
+        type: string
+      allow_unassigned:
+        description: "File issues even for sources with no steward assigned"
+        required: false
+        type: boolean
+        default: false
+      dry_run:
+        description: "Report what would happen without touching issues or committing"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: data-freshness
+  cancel-in-progress: false
+
+jobs:
+  freshness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          # Only what the freshness engine needs. Deliberately excludes the
+          # geospatial stack: this job must not depend on sf/tigris building.
+          packages: |
+            any::digest
+            any::dplyr
+            any::fs
+            any::glue
+            any::jsonlite
+            any::readr
+            any::rlang
+            any::tibble
+            any::yaml
+
+      - name: Validate source registry
+        run: Rscript scripts/01_validate_sources.R
+
+      - name: Check freshness
+        id: freshness
+        shell: bash
+        run: |
+          set +e
+          if [ -n "${{ inputs.as_of }}" ]; then
+            Rscript scripts/02_check_freshness.R --as-of "${{ inputs.as_of }}"
+          else
+            Rscript scripts/02_check_freshness.R
+          fi
+          code=$?
+          set -e
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          if [ "$code" -gt 2 ]; then
+            echo "::error::freshness check crashed (exit $code)"
+            exit "$code"
+          fi
+
+      - name: Plan notifications
+        id: plan
+        shell: bash
+        run: |
+          set +e
+          ARGS=""
+          if [ -n "${{ inputs.as_of }}" ]; then ARGS="$ARGS --as-of ${{ inputs.as_of }}"; fi
+          if [ "${{ inputs.allow_unassigned }}" = "true" ]; then ARGS="$ARGS --allow-unassigned"; fi
+          Rscript scripts/04_plan_notifications.R $ARGS
+          code=$?
+          set -e
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+
+          # 3 = sources need attention but nobody owns them. Surface it as a
+          # failure rather than filing issues with no assignee: an unassigned
+          # issue is how a team learns to ignore the board.
+          if [ "$code" -eq 3 ]; then
+            {
+              echo "### Data freshness: stewards not assigned"
+              echo
+              echo "Sources are past their SLA, but \`config/sources.yml\` has no steward for them,"
+              echo "so no issues were filed. Populate \`config/stewards.yml\` from"
+              echo "\`config/stewards.example.yml\` and set \`steward:\` on each source."
+              echo
+              echo "To file them anyway, re-run this workflow with **allow_unassigned** checked."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ "$code" -gt 3 ]; then
+            echo "::error::notification planning crashed (exit $code)"
+            exit "$code"
+          fi
+
+      - name: Publish the rendered board
+        if: inputs.dry_run != true
+        shell: bash
+        run: |
+          if git diff --quiet -- docs/data_status.md; then
+            echo "docs/data_status.md unchanged"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/data_status.md
+          git commit -m "chore(data): refresh data status board [skip ci]"
+          git push
+
+      - name: Ensure labels exist
+        if: steps.plan.outputs.exit_code == '1' && inputs.dry_run != true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ensure() {
+            gh label create "$1" --color "$2" --description "$3" --force >/dev/null 2>&1 || true
+          }
+          ensure "data-refresh"  "1d76db" "A registered data source is past its staleness SLA"
+          ensure "manual-upload" "fbca04" "Refresh requires a human to retrieve and drop the file"
+          ensure "automated"     "0e8a16" "Refresh should happen via a connector"
+          ensure "blocking"      "b60205" "Past the failure threshold, not just the warning"
+
+      - name: Open or update refresh issues
+        if: steps.plan.outputs.exit_code == '1' && inputs.dry_run != true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          PLAN=outputs/metadata/notifications/plan.json
+          DIR=outputs/metadata/notifications
+
+          # Every open data-refresh issue, so we can reconcile rather than
+          # blindly create. Title is the dedup key.
+          gh issue list --label data-refresh --state open --limit 200 \
+            --json number,title,labels,assignees > /tmp/open_issues.json
+
+          touch /tmp/handled.txt
+
+          jq -c '.[]' "$PLAN" | while read -r item; do
+            SID=$(jq -r '.source_id' <<<"$item")
+            TITLE=$(jq -r '.title' <<<"$item")
+            STATUS=$(jq -r '.status' <<<"$item")
+            OVERDUE=$(jq -r '.days_overdue' <<<"$item")
+            ESC=$(jq -r '.escalation // empty' <<<"$item")
+            ASSIGNEE=$(jq -r '.assignee // empty' <<<"$item")
+            BODY="$DIR/$(jq -r '.body_file' <<<"$item")"
+            mapfile -t LABELS < <(jq -r '.labels[]' <<<"$item")
+
+            LABEL_ARGS=()
+            for l in "${LABELS[@]}"; do LABEL_ARGS+=(--label "$l"); done
+
+            NUM=$(jq -r --arg t "$TITLE" '.[] | select(.title == $t) | .number' /tmp/open_issues.json | head -1)
+
+            if [ -z "$NUM" ]; then
+              echo "::notice::opening issue for $SID ($STATUS, ${OVERDUE}d overdue)"
+              CREATE=(gh issue create --title "$TITLE" --body-file "$BODY" "${LABEL_ARGS[@]}")
+              if [ -n "$ASSIGNEE" ]; then CREATE+=(--assignee "$ASSIGNEE"); fi
+              # An invalid assignee must not lose the issue: retry unassigned.
+              URL=$("${CREATE[@]}" 2>/dev/null) || URL=$(gh issue create \
+                --title "$TITLE" --body-file "$BODY" "${LABEL_ARGS[@]}")
+              echo "  -> $URL"
+              echo "$TITLE" >> /tmp/handled.txt
+              continue
+            fi
+
+            echo "$TITLE" >> /tmp/handled.txt
+            echo "::notice::issue #$NUM already open for $SID; reconciling"
+
+            # Keep the body and labels current without adding noise.
+            EDIT=(gh issue edit "$NUM" --body-file "$BODY" "${LABEL_ARGS[@]}")
+            if [ -n "$ASSIGNEE" ]; then EDIT+=(--add-assignee "$ASSIGNEE"); fi
+            "${EDIT[@]}" >/dev/null 2>&1 || gh issue edit "$NUM" --body-file "$BODY" >/dev/null
+
+            # Escalate at 14 and 30 days overdue only, and only once each. The
+            # marker makes it idempotent, so a weekly run does not re-comment.
+            if [ -n "$ESC" ]; then
+              MARKER="<!-- eig-escalation:$ESC -->"
+              if gh issue view "$NUM" --json comments \
+                   --jq '.comments[].body' | grep -qF "$MARKER"; then
+                echo "  already escalated at ${ESC}d"
+              else
+                gh issue comment "$NUM" --body "$(printf '%s\n\n%s\n\n%s' \
+                  "**Still stale after ${OVERDUE} days past the warning threshold.**" \
+                  "Status is now \`$STATUS\`. The retrieval steps are in the issue body above; nothing else is needed to action this." \
+                  "$MARKER")" >/dev/null
+                echo "  escalated at ${ESC}d"
+              fi
+            fi
+          done
+
+      - name: Close issues for recovered sources
+        # Only when the plan was actually applied (0 = nothing stale, 1 = issues
+        # reconciled). NOT on 3: the steward gate skips the reconcile step, so
+        # `handled.txt` would be empty and every open issue would be closed while
+        # its source is still stale.
+        if: >-
+          inputs.dry_run != true &&
+          (steps.plan.outputs.exit_code == '0' || steps.plan.outputs.exit_code == '1')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Anything with an open data-refresh issue that is no longer in the
+          # plan is back inside its SLA. Close the loop automatically: if stale
+          # issues linger after a source recovers, people stop trusting them.
+          gh issue list --label data-refresh --state open --limit 200 \
+            --json number,title --jq '.[] | [.number, .title] | @tsv' > /tmp/still_open.tsv || true
+
+          [ -f /tmp/handled.txt ] || touch /tmp/handled.txt
+
+          while IFS=$'\t' read -r num title; do
+            [ -n "${num:-}" ] || continue
+            if ! grep -qxF "$title" /tmp/handled.txt; then
+              echo "::notice::closing #$num -- source is back within its SLA"
+              gh issue comment "$num" --body \
+                "Back within its staleness SLA as of $(date -u +%Y-%m-%d). Closing automatically; this issue will reopen if the source goes stale again." >/dev/null
+              gh issue close "$num" >/dev/null
+            fi
+          done < /tmp/still_open.tsv
+
+      - name: Notify webhook
+        # Optional fan-out. Skipped silently when the secret is not configured,
+        # so a repo without a Teams/Slack hook is not a broken workflow.
+        if: steps.plan.outputs.exit_code == '1' && inputs.dry_run != true
+        env:
+          WEBHOOK: ${{ secrets.DATA_ALERT_WEBHOOK }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${WEBHOOK:-}" ]; then
+            echo "DATA_ALERT_WEBHOOK not set; skipping webhook fan-out"
+            exit 0
+          fi
+          COUNT=$(jq 'length' outputs/metadata/notifications/plan.json)
+          FAILING=$(jq '[.[] | select(.status == "fail")] | length' outputs/metadata/notifications/plan.json)
+          TEXT="Electro-Industrial Index data freshness: ${COUNT} source(s) need attention, ${FAILING} past the failure threshold. Board: https://github.com/${{ github.repository }}/blob/main/docs/data_status.md"
+          curl -sS -X POST -H 'Content-Type: application/json' \
+            -d "$(jq -n --arg t "$TEXT" '{text: $t}')" "$WEBHOOK" >/dev/null \
+            || echo "::warning::webhook POST failed; continuing"
+
+      - name: Summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### Data freshness"
+            echo
+            if [ -f docs/data_status.md ]; then
+              sed -n '3,12p' docs/data_status.md
+            fi
+            echo
+            echo "Freshness exit code: \`${{ steps.freshness.outputs.exit_code }}\` "
+            echo "(0 all fresh, 1 warn/pending, 2 fail)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: data-status
+          path: |
+            outputs/metadata/data_status.json
+            outputs/metadata/notifications/
+          if-no-files-found: warn
