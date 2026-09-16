@@ -38,8 +38,23 @@ build_cluster_index <- function(inputs, geo_col = "state", top_label_col = geo_c
   scaled %>%
     dplyr::rowwise() %>%
     dplyr::mutate(
-      max_anchor = max(dplyr::c_across(dplyr::all_of(anchor_vars)), na.rm = TRUE),
-      dominant_anchor = anchor_vars[which.max(dplyr::c_across(dplyr::all_of(anchor_vars)))],
+      # A geography can legitimately have no anchor data at all -- every
+      # manufacturing and datacenter value missing. `which.max()` returns
+      # integer(0) for an all-NA row, which makes `dominant_anchor` size 0 and
+      # aborts the whole index; `max(na.rm = TRUE)` returns -Inf with a warning.
+      # Neither is a scoring decision, so handle the empty case explicitly.
+      #
+      # This preserves the resulting index: -Inf previously became NA in
+      # scale_minmax(), which drops non-finite values, and NA stays NA. The
+      # composite then coalesces a missing cluster_index to 0 as before.
+      max_anchor = {
+        anchors <- dplyr::c_across(dplyr::all_of(anchor_vars))
+        if (all(is.na(anchors))) NA_real_ else max(anchors, na.rm = TRUE)
+      },
+      dominant_anchor = {
+        anchors <- dplyr::c_across(dplyr::all_of(anchor_vars))
+        if (all(is.na(anchors))) NA_character_ else anchor_vars[which.max(anchors)]
+      },
       positive = rowMeans(dplyr::pick(dplyr::all_of(positive)), na.rm = TRUE),
       negative = rowMeans(dplyr::pick(dplyr::all_of(negative)), na.rm = TRUE)
     ) %>%

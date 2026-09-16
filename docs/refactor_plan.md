@@ -603,16 +603,76 @@ The repository is public (`https://github.com/lrcarey222/Electro-Industrial-Geos
 per your constraint. I have also not asserted what any of these licences actually say, because I
 have not read them.
 
-**What needs your decision, in order:**
+**Decisions taken (2026-09-16).**
 
-1. **Is the repository intended to be public?** Everything else follows from this.
-2. **Which of the four may be redistributed?** This sets `can_commit_raw` per source in
-   `config/sources.yml`. My working assumption for Phase 1 is `false` for all four until told
-   otherwise.
-3. **History.** These files are in every commit that added them. Options, for you to weigh with
-   whoever owns data governance at RMI: leave as-is; remove from `HEAD` and accept that history
-   retains them; or rewrite history. I will not run a history rewrite without explicit written
-   approval, and I would want RMI legal or data governance to make that call rather than me.
+1. **The repository stays public**, with the standing rule that **any raw data that is not itself
+   public must not be accessible through it.** That rule, not a file-by-file judgement, is what
+   `can_commit_raw: false` now encodes.
+2. **BNEF and Good Jobs First may not be redistributed.** Both are untracked as of this change, and
+   `.gitignore` now excludes their directories plus their filenames wherever they are dropped. Only
+   their manifest entries remain committed — vintage, hash, row count, schema fingerprint — which
+   is enough to prove which version produced a published number without shipping the payload.
+3. **A history rewrite is authorised for the BNEF data.** ⚠️ **Not yet performed** — see
+   [F-13a](#f-13a) for the plan, the consequences, and what a force-push does *not* achieve on its
+   own.
+
+**Still open under rule 1:** `climate_leg.csv` (licensed legislative tracker, publisher now
+confirmed as needing verification) and `dbo_Program.csv` (C2ER State Business Incentives Database —
+a subscription product). Both are still tracked. By the stated rule they should also come out; they
+were not named explicitly in the decision, so they are flagged rather than removed.
+
+**Enforcement.** CI now fails if any tracked file is excluded by `.gitignore`
+(`git ls-files -i -c --exclude-standard`), which is what a `git add -f` of a licensed payload looks
+like. Verified to catch a forced re-add.
+
+**One consequence worth recording:** removing BNEF exposed a latent crash in
+`build_cluster_index()`. `dominant_anchor = anchor_vars[which.max(...)]` returns `character(0)` for
+a geography with no anchor data at all, which aborts the index. BNEF had been supplying
+`datacenter_mw` for all 50 states, so at least one anchor was always present and the case never
+arose. Fixed in the same change, preserving the resulting index: `-Inf` previously became `NA` in
+`scale_minmax()`, and `NA` stays `NA`.
+
+---
+
+<a id="f-13a"></a>
+### F-13a — History rewrite plan for the BNEF payload *(authorised, not yet run)*
+
+Untracking a file removes it from `HEAD`. **It does not remove it from the repository.** The blob
+stays reachable by SHA, so anyone who knows or can find the object id can still download 37.7 MB of
+licensed data from a public repo. If the point is that the data is not accessible, the rewrite is
+the only step that achieves it.
+
+**What the rewrite involves**
+
+1. `git filter-repo --invert-paths --path 'data/raw/BNEF/'` on a fresh mirror clone.
+2. Force-push every branch and tag.
+3. **Ask GitHub Support to purge unreachable objects and cached views.** Without this, the old blobs
+   remain fetchable by SHA even after the force-push — GitHub does not garbage-collect on demand.
+   This step is the one people skip, and skipping it makes the whole exercise cosmetic.
+4. Check for forks. A fork is an independent copy: the data survives there regardless of what we do
+   here, and only the fork owner can remove it.
+
+**Consequences, which need accepting before anyone runs it**
+
+- Every commit SHA from the first BNEF commit onward changes. Every existing clone must be re-cloned;
+  `git pull` will not recover.
+- Open PRs against rewritten history break. **This is why the rewrite must come after the current
+  work is merged, not during it.**
+- Any SHA referenced elsewhere — a notebook, a doc, a Slack message, a citation — stops resolving.
+- The commit dates in this repo suggest BNEF has been present since early February 2026, so the
+  rewrite touches most of the repository's history.
+
+**Recommended sequencing**
+
+1. Land this change (untrack + ignore + CI guard). Stops any *new* distribution immediately.
+2. Merge everything else in flight.
+3. Announce a freeze, run the rewrite, force-push, file the GitHub Support request.
+4. Everyone re-clones.
+
+**Recommendation on scope:** if the rewrite is happening anyway, purge `gjf_complete.csv`,
+`climate_leg.csv` and `dbo_Program.csv` in the same pass. The disruption is identical whether you
+remove one path or four, and the alternative is a second freeze-and-re-clone later. This needs an
+explicit yes, since only BNEF was authorised.
 
 The committed OneDrive tree is a separate, smaller instance of the same class of problem — see
 Part 2, item 1.
