@@ -1,0 +1,68 @@
+# ---------------------------------------------------------------------------
+# Steward map -- who answers for each source when it goes stale.
+#
+# Read by the freshness notifier to assign data-refresh issues. `steward:` in
+# config/sources.yml holds the github_handle directly; this file records who
+# that is and what else they own. CI checks the two agree, so a source cannot
+# be assigned to someone who is not listed here.
+#
+# github_handle values are public GitHub usernames. Email is deliberately null:
+# handles are enough to assign an issue, and the notifier never prints contact
+# details into a public issue body. See config/stewards.example.yml for the
+# full schema.
+# ---------------------------------------------------------------------------
+
+stewards:
+  - id: jon
+    github_handle: jonekberg
+    name: "Jon"
+    email: null
+    role: "Data sources other than BNEF"
+    backup: lachlan
+    sources_owned:   # 24
+      - afdc_ev_registrations
+      - afdc_station_counts
+      - bea_sagdp
+      - bea_sqgdp
+      - bls_qcew
+      - census_county_population
+      - census_tiger_states
+      - clean_investment_monitor
+      - climate_legislation
+      - cnbc_state_rankings
+      - cpcn_requirements
+      - drone_facility_announcements
+      - eia_860m_generators
+      - eia_861m_sales_revenue
+      - eig_dynamism
+      - fcc_pea_county_crosswalk
+      - fcc_pea_shapefile
+      - gjf_subsidy_tracker
+      - lbnl_interconnection_queue
+      - nrel_supply_curve
+      - rmi_employment_lq
+      - rmi_feasibility
+      - sia_semiconductor_investment
+      - state_sepa
+
+  - id: ben
+    github_handle: bsf-rmi
+    name: "Ben"
+    email: null
+    role: "BloombergNEF data centre capacity"
+    backup: lachlan
+    sources_owned:   # 1
+      - bnef_datacenter_capacity
+
+  - id: lachlan
+    github_handle: lrcarey222
+    name: "Lachlan"
+    email: null
+    role: "Sources identified on 2026-09-16, and open provenance questions"
+    backup: jon
+    sources_owned:   # 5
+      - dev_program_db
+      - dsire_policy_count
+      - regdata_subnational
+      - solar_ordinances
+      - spot_gap_analysis

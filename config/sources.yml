@@ -64,7 +64,7 @@ sources:
     staleness:
       warn_after_days: 60
       fail_after_days: 120
-    steward: TODO
+    steward: jonekberg
     can_commit_raw: true
     license: "Public domain (US Government work)"
     notes: >
@@ -87,7 +87,7 @@ sources:
     staleness:
       warn_after_days: 60
       fail_after_days: 120
-    steward: TODO
+    steward: jonekberg
     can_commit_raw: true
     license: "Public domain (US Government work)"
     notes: >
@@ -111,7 +111,7 @@ sources:
     staleness:
       warn_after_days: 150
       fail_after_days: 240
-    steward: TODO
+    steward: jonekberg
     can_commit_raw: true
     license: "Public domain (US Government work)"
     notes: >
@@ -134,7 +134,7 @@ sources:
     staleness:
       warn_after_days: 400
       fail_after_days: 550
-    steward: TODO
+    steward: jonekberg
     can_commit_raw: true
     license: "Public domain (US Government work)"
     notes: >
@@ -155,7 +155,7 @@ sources:
     staleness:
       warn_after_days: 150
       fail_after_days: 240
-    steward: TODO
+    steward: jonekberg
     can_commit_raw: true
     license: "Public domain (US Government work)"
     notes: >
@@ -178,7 +178,7 @@ sources:
     staleness:
       warn_after_days: 550
       fail_after_days: 730
-    steward: TODO
+    steward: jonekberg
     # TODO-CONFIRM: EIG is a non-profit, not a government body. Redistribution
     # terms for the downloadable workbook have not been checked.
     can_commit_raw: false
@@ -202,7 +202,7 @@ sources:
     staleness:
       warn_after_days: 400
       fail_after_days: 550
-    steward: TODO
+    steward: jonekberg
     can_commit_raw: true
     license: "TODO-CONFIRM: LBNL publications are generally freely available; terms not verified."
     notes: >
@@ -224,7 +224,7 @@ sources:
     staleness:
       warn_after_days: 400
       fail_after_days: 550
-    steward: TODO
+    steward: jonekberg
     can_commit_raw: true
     license: "Public domain (US Government work)"
     notes: >
@@ -247,7 +247,7 @@ sources:
     staleness:
       warn_after_days: 400
       fail_after_days: 550
-    steward: TODO
+    steward: jonekberg
     can_commit_raw: true
     license: "Public domain (US Government work)"
     notes: >
@@ -269,7 +269,7 @@ sources:
     staleness:
       warn_after_days: 400
       fail_after_days: 550
-    steward: TODO
+    steward: jonekberg
     can_commit_raw: true
     license: "Public domain (US Government work)"
     notes: >
@@ -291,7 +291,7 @@ sources:
     staleness:
       warn_after_days: 400
       fail_after_days: 550
-    steward: TODO
+    steward: jonekberg
     can_commit_raw: true
     license: "Public domain (US Government work)"
     notes: >
@@ -313,7 +313,7 @@ sources:
     staleness:
       warn_after_days: 730
       fail_after_days: 1095
-    steward: TODO
+    steward: jonekberg
     can_commit_raw: true
     license: "Public domain (US Government work)"
     notes: >
@@ -335,7 +335,7 @@ sources:
     staleness:
       warn_after_days: 730
       fail_after_days: 1095
-    steward: TODO
+    steward: jonekberg
     can_commit_raw: true
     license: "Public domain (US Government work)"
     notes: >
@@ -364,7 +364,7 @@ sources:
     staleness:
       warn_after_days: 150
       fail_after_days: 240
-    steward: TODO
+    steward: jonekberg
     # TODO-CONFIRM: no licence text ships with the CSVs and the repo is
     # MIT-licensed. Treated as non-redistributable until confirmed.
     can_commit_raw: false
@@ -404,7 +404,7 @@ sources:
     staleness:
       warn_after_days: 150
       fail_after_days: 240
-    steward: TODO
+    steward: bsf-rmi
     can_commit_raw: false
     license: "Commercial subscription -- redistribution prohibited"
     manual_instructions: >
@@ -438,7 +438,7 @@ sources:
     staleness:
       warn_after_days: 550
       fail_after_days: 730
-    steward: TODO
+    steward: jonekberg
     can_commit_raw: false
     license: "TODO-CONFIRM -- treated as non-redistributable"
     manual_instructions: >
@@ -471,7 +471,7 @@ sources:
     staleness:
       warn_after_days: 550
       fail_after_days: 730
-    steward: TODO
+    steward: jonekberg
     can_commit_raw: false
     license: "TODO-CONFIRM -- treated as non-redistributable"
     manual_instructions: >
@@ -507,7 +507,7 @@ sources:
     staleness:
       warn_after_days: 550
       fail_after_days: 730
-    steward: TODO
+    steward: jonekberg
     can_commit_raw: false
     license: "TODO-CONFIRM"
     manual_instructions: >
@@ -538,7 +538,7 @@ sources:
     staleness:
       warn_after_days: 400
       fail_after_days: 550
-    steward: TODO
+    steward: jonekberg
     can_commit_raw: false
     license: "Editorial content -- redistribution not permitted"
     manual_instructions: >
@@ -569,7 +569,7 @@ sources:
     staleness:
       warn_after_days: 550
       fail_after_days: 730
-    steward: TODO
+    steward: jonekberg
     can_commit_raw: false
     license: "RMI internal"
     manual_instructions: >
@@ -599,7 +599,7 @@ sources:
     staleness:
       warn_after_days: 550
       fail_after_days: 730
-    steward: TODO
+    steward: jonekberg
     can_commit_raw: false
     license: "TODO-CONFIRM -- NREL source data is public domain; the derived index is RMI internal"
     manual_instructions: >
@@ -628,7 +628,7 @@ sources:
     staleness:
       warn_after_days: 400
       fail_after_days: 550
-    steward: TODO
+    steward: jonekberg
     can_commit_raw: false
     license: "RMI internal"
     manual_instructions: >
@@ -659,7 +659,7 @@ sources:
     staleness:
       warn_after_days: 730
       fail_after_days: 1095
-    steward: TODO
+    steward: jonekberg
     can_commit_raw: true
     license: "RMI internal (compilation of public statute)"
     manual_instructions: >
@@ -691,7 +691,7 @@ sources:
     staleness:
       warn_after_days: 730
       fail_after_days: 1095
-    steward: TODO
+    steward: jonekberg
     can_commit_raw: true
     license: "RMI internal (compilation of public statute)"
     manual_instructions: >
@@ -711,132 +711,9 @@ sources:
   - id: spot_gap_analysis
     label: "SPOT policy score (50 State Gap Analysis workbook)"
     feeds: [spot_score]
-    publisher: "TODO-CONFIRM -- unidentified"
-    access_class: unknown
-    endpoint: null
-    auth_env: null
-    geography: state
-    cadence: null
-    typical_release_lag_days: null
-    refresh_cron: null
-    staleness:
-      warn_after_days: 550
-      fail_after_days: 730
-    steward: TODO
-    can_commit_raw: false
-    license: "TODO-CONFIRM"
-    manual_instructions: >
-      TODO-CONFIRM: cannot be written until the publisher is known.
-      data/README.md calls this the "SPOT Index" and marks it Public, but no
-      URL, publisher or organisation appears anywhere in the code, the workbook
-      carries no provenance metadata, and the legacy script's only reference is
-      the tautology `spot <- spot`. One worksheet per state of Yes/No/Partial
-      answers, averaged into a score.
-    template: data/manual/spot_gap_analysis/TEMPLATE.csv
-    column_contract:
-      spot: [state, spot_score]
-    notes: "See docs/data_audit.md A-1."
-
-  - id: dsire_policy_count
-    label: "DSIRE state policy count"
-    feeds: [dsire_policy_count]
-    publisher: "TODO-CONFIRM -- docs claim DSIRE; no code produces it"
-    access_class: unknown
-    endpoint: null
-    auth_env: null
-    geography: state
-    cadence: null
-    typical_release_lag_days: null
-    refresh_cron: null
-    staleness:
-      warn_after_days: 550
-      fail_after_days: 730
-    steward: TODO
-    can_commit_raw: false
-    license: "TODO-CONFIRM"
-    manual_instructions: >
-      TODO-CONFIRM: no retrieval path exists. The legacy script reads an
-      undefined `dsire_inc` object and nothing in scripts/ or R/ produces this
-      indicator, so it can only ever have arrived via data/inputs.csv -- a file
-      that does not exist in this repository. If the intended source is the
-      DSIRE database at ncsolarcen-prod.s3.amazonaws.com, that needs
-      confirming and wiring up.
-    template: data/manual/dsire_policy_count/TEMPLATE.csv
-    column_contract:
-      dsire: [state, dsire_policy_count]
-    notes: "Currently sample data only -- 3 of 50 states."
-
-  - id: dev_program_db
-    label: "State economic development programme inventory (dbo_Program)"
-    feeds: [dev_policy_count]
-    publisher: "TODO-CONFIRM -- unidentified"
-    access_class: unknown
-    endpoint: null
-    auth_env: null
-    geography: state
-    cadence: null
-    typical_release_lag_days: null
-    refresh_cron: null
-    staleness:
-      warn_after_days: 550
-      fail_after_days: 730
-    steward: TODO
-    can_commit_raw: false
-    license: "TODO-CONFIRM"
-    manual_instructions: >
-      TODO-CONFIRM: cannot be written until the publisher is known. The dbo_
-      prefix indicates a SQL Server table export, and the columns (ProgramCap,
-      LegalCitation, ReportingRequirement, ProgramObjective, administrator
-      contact fields) describe a state business-incentive programme inventory.
-      This is deliberately NOT attributed to a vendor. The steward must state
-      what it is and whether it may be redistributed.
-    template: data/manual/dev_program_db/TEMPLATE.csv
-    column_contract:
-      dbo_program: [State, Program_Name, Program_Status, ProgramDescription]
-    notes: >
-      7.1 MB, currently committed to this public repository -- see F-13.
-      Filtered on a 20-term keyword list against ProgramDescription and counted
-      per state. See docs/data_audit.md A-2.
-
-  - id: solar_ordinances
-    label: "Local solar ordinance records"
-    feeds: [ordinance]
-    publisher: "TODO-CONFIRM -- unidentified"
-    access_class: unknown
-    endpoint: null
-    auth_env: null
-    geography: county-rolled-up
-    cadence: null
-    typical_release_lag_days: null
-    refresh_cron: null
-    staleness:
-      warn_after_days: 550
-      fail_after_days: 730
-    steward: TODO
-    can_commit_raw: false
-    license: "TODO-CONFIRM"
-    manual_instructions: >
-      TODO-CONFIRM: cannot be written until the publisher is known.
-      data/README.md calls this an internal compilation, but the schema
-      (Feature Type, Value Type, Value, Citation, Original Captured Date,
-      Update Status) resembles a published local-ordinance database. Candidate
-      upstreams are the NREL and Sabin Center ordinance databases; neither is
-      referenced in the code.
-    template: data/manual/solar_ordinances/TEMPLATE.csv
-    column_contract:
-      solar_ordinances: [State, County, "Feature Type", Citation, "Ordinance Year"]
-    notes: >
-      1,412 rows covering only 34 of 50 states, ordinance years 2009-2021. The
-      16 missing states are NA rather than zero, and rowmean_index() drops them,
-      so their ease_index is computed from three indicators instead of four --
-      see docs/refactor_plan.md 3.9. See also docs/data_audit.md A-5.
-
-  - id: regdata_subnational
-    label: "RegData subnational regulatory restrictions"
-    feeds: [regdata_index]
-    publisher: "Mercatus Center / QuantGov"
-    access_class: unknown
-    endpoint: null
+    publisher: "SPOT for Clean Energy (State Policy Opportunity Tracker)"
+    access_class: manual
+    endpoint: "https://www.spotforcleanenergy.org/"
     auth_env: null
     geography: state
     cadence: irregular
@@ -845,21 +722,213 @@ sources:
     staleness:
       warn_after_days: 550
       fail_after_days: 730
-    steward: TODO
+    steward: lrcarey222
+    # BLOCKED, not merely unconfirmed. See notes: the publisher explicitly
+    # disclaims the use this index makes of the data. Do not write a connector
+    # for this source until that is resolved.
     can_commit_raw: false
-    license: "TODO-CONFIRM"
+    license: "TODO-CONFIRM -- underlying facts are stated to be public domain, but see the use restriction in notes"
     manual_instructions: >
-      The publisher is named in docs/sources.md but NO endpoint is recorded
-      anywhere in this repository, so this cannot be automated as things stand.
-      TODO-CONFIRM the download location on quantgov.org, then promote this
-      entry to file_url.
+      Source identified 2026-09-16 as spotforcleanenergy.org. DO NOT REFRESH OR
+      AUTOMATE THIS SOURCE until the use restriction below is resolved by a
+      human. Retrieval steps are deliberately not recorded yet, because the
+      question is not how to get the data but whether this index may use it.
+    template: data/manual/spot_gap_analysis/TEMPLATE.csv
+    column_contract:
+      spot: [state, spot_score]
+    notes: >
+      *** USE RESTRICTION CONFLICT -- NEEDS A HUMAN DECISION ***
+
+      The SPOT landing page states, unprompted: "This website, and the data
+      contained within it, should not be used to score or rank states.
+      Moreover, the component questions within a given policy, although they
+      are represented together graphically, are not additive."
+
+      This pipeline does both of the things that sentence rules out. It averages
+      the Yes/No/Partial answers across component questions into spot_score
+      (07_process_data.R ~1254-1261), which is additive aggregation, and
+      spot_score then feeds policy_intent and the composite Electro-Industrial
+      Index, whose outputs rank states.
+
+      The page also says all the information is derived from the public domain,
+      so the underlying facts are probably usable -- but the publisher's stated
+      restriction is on the aggregation and ranking, which is precisely what the
+      index does with it.
+
+      Options, none of which are mine to choose: seek written permission from
+      SPOT; replace spot_score with a differently-constructed indicator; or
+      remove it from policy_intent, which would change sub-index composition and
+      leave policy_intent with four variables. Until then this source is
+      identified but blocked.
+
+      Also unresolved: the committed workbook is "50 State Gap Analysis.xlsx",
+      one worksheet per state, which is not obviously a SPOT export. Whether it
+      came from SPOT at all, or from an intermediary who had already done the
+      aggregation, still needs confirming. See docs/data_audit.md A-1.
+
+  - id: dsire_policy_count
+    label: "DSIRE state policy count"
+    feeds: [dsire_policy_count]
+    publisher: "N.C. Clean Energy Technology Center (DSIRE)"
+    access_class: api
+    endpoint: "https://dsireusa.org/dsire-api/"
+    auth_env: null
+    geography: state
+    cadence: quarterly
+    typical_release_lag_days: 30
+    refresh_cron: null
+    staleness:
+      warn_after_days: 150
+      fail_after_days: 240
+    steward: lrcarey222
+    can_commit_raw: true
+    license: "TODO-CONFIRM -- DSIRE terms of use not yet read"
+    template: data/manual/dsire_policy_count/TEMPLATE.csv
+    column_contract:
+      dsire: [state, dsire_policy_count]
+    notes: >
+      Publisher and endpoint confirmed 2026-09-16; DSIRE exposes an API.
+
+      This indicator has NEVER had a working retrieval path in this repository:
+      the legacy script reads an undefined `dsire_inc` object and nothing in
+      scripts/ or R/ produces it, so it could only ever have arrived via
+      data/inputs.csv, which does not exist here. It currently holds sample data
+      for 3 of 50 states.
+
+      Before a connector can be written, someone must define what is being
+      counted. "DSIRE policy count" is ambiguous: DSIRE covers many programme
+      types across incentives and regulatory policies, and the count depends
+      entirely on which categories are included. That is a methodology
+      decision, not a retrieval detail.
+
+  - id: dev_program_db
+    label: "State economic development programme inventory (dbo_Program)"
+    feeds: [dev_policy_count]
+    publisher: "C2ER (Council for Community and Economic Research), State Business Incentives Database"
+    access_class: licensed
+    endpoint: "https://www.c2er.org/state-business-incentives-database/"
+    auth_env: null
+    geography: state
+    cadence: annual
+    typical_release_lag_days: null
+    refresh_cron: null
+    staleness:
+      warn_after_days: 400
+      fail_after_days: 550
+    steward: lrcarey222
+    can_commit_raw: false
+    license: "Commercial subscription -- redistribution not permitted"
+    manual_instructions: >
+      Requires a C2ER State Business Incentives Database subscription. Export
+      the programme inventory as CSV, preserving the columns in the contract
+      below. The committed file is a SQL Server table export (hence the dbo_
+      prefix), so a fresh export may need reshaping to match.
+
+      Do NOT commit the payload: can_commit_raw is false. Place it in the
+      directory named by EIG_MANUAL_DIR.
+
+      A candidate alternative, if the subscription lapses, is the incentives map
+      at fivepointsstrategies.com/incentives-map.html -- unevaluated, and
+      switching would change what dev_policy_count measures, so it needs a
+      methodology decision rather than a like-for-like swap.
+    template: data/manual/dev_program_db/TEMPLATE.csv
+    column_contract:
+      dbo_program: [State, Program_Name, Program_Status, ProgramDescription]
+    notes: >
+      Publisher confirmed 2026-09-16 as C2ER, which validates the inference
+      recorded as A-2 in docs/data_audit.md. Retained as a licensed manual
+      source rather than dropped: dropping dev_policy_count would reduce
+      policy_intent from five variables to four, which is a change to sub-index
+      composition.
+
+      7.1 MB and STILL TRACKED in this public repository. By the standing rule
+      that non-public raw data must not be accessible through the repo, this
+      payload should be untracked alongside BNEF and GJF. Deferred to the
+      end-of-update governance pass -- see docs/refactor_plan.md F-13.
+
+      Filtered on a 20-term keyword list against ProgramDescription and counted
+      per state; the keyword list is undocumented and unreviewed.
+
+  - id: solar_ordinances
+    label: "Local solar ordinance records"
+    feeds: [ordinance]
+    publisher: "National Renewable Energy Laboratory (via OpenEI)"
+    access_class: file_url
+    endpoint: "https://data.openei.org/submissions/5734"
+    auth_env: null
+    geography: county-rolled-up
+    cadence: irregular
+    typical_release_lag_days: null
+    refresh_cron: null
+    staleness:
+      warn_after_days: 550
+      fail_after_days: 730
+    steward: lrcarey222
+    can_commit_raw: true
+    license: "TODO-CONFIRM -- OpenEI licences are per submission; read submission 5734's terms"
+    manual_instructions: >
+      Download the ordinance dataset from OpenEI submission 5734. This confirms
+      the inference recorded as A-5 in docs/data_audit.md: the schema (Feature
+      Type, Value Type, Value, Citation, Original Captured Date, Update Status)
+      is NREL's local-ordinance database, not an internal compilation as
+      data/README.md claimed.
+    template: data/manual/solar_ordinances/TEMPLATE.csv
+    column_contract:
+      solar_ordinances: [State, County, "Feature Type", Citation, "Ordinance Year"]
+    notes: >
+      Publisher and endpoint confirmed 2026-09-16. OpenEI is NREL-operated, so
+      the data is very likely redistributable, but OpenEI licences are set per
+      submission -- read 5734's before relying on can_commit_raw.
+
+      1,412 rows covering only 34 of 50 states, ordinance years 2009-2021. The
+      16 missing states are NA rather than zero, and rowmean_index() drops them,
+      so their ease_index is computed from three indicators instead of four --
+      see docs/refactor_plan.md 3.9.
+
+      OPEN QUESTION for the steward: are those 16 states genuinely free of
+      recorded solar ordinances, or merely uncollected? It changes the answer
+      materially. `ordinance` is reverse-scaled, so a true zero should be the
+      MOST favourable score, not a dropped column.
+
+  - id: regdata_subnational
+    label: "RegData subnational regulatory restrictions"
+    feeds: [regdata_index]
+    publisher: "Mercatus Center / QuantGov"
+    access_class: file_url
+    endpoint: "https://www.quantgov.org/csv-download"
+    auth_env: null
+    geography: state
+    cadence: irregular
+    typical_release_lag_days: null
+    refresh_cron: null
+    staleness:
+      warn_after_days: 550
+      fail_after_days: 730
+    steward: lrcarey222
+    can_commit_raw: true
+    license: "CC BY 4.0 -- attribution required (stated on the QuantGov bulk download page)"
     template: data/manual/regdata_subnational/TEMPLATE.csv
     column_contract:
       regdata: [Country, Jurisdiction, "Year of Period Code", Restrictions, Words]
     notes: >
-      Period codes 2020-2022 in the committed file, 50 US jurisdictions.
-      access_class is `unknown` rather than `file_url` because a named
-      publisher without a recorded endpoint is not an automatable source.
+      Endpoint and licence confirmed 2026-09-16. QuantGov states on the bulk
+      download page that all its datasets are CC BY 4.0, so this may be
+      committed provided attribution is preserved.
+
+      CONNECTOR CAVEAT: the committed Regdata_subnational.csv is NOT a direct
+      download. It is a 3.5 KB hand-assembled cross-national summary -- it
+      contains Australian jurisdictions as well as US states -- whereas QuantGov
+      publishes separate products per country (RegData Australia 2.2, Canada
+      2.2, UK 1.0, India 1.0) and several State RegData editions. The pipeline
+      filters country == "United States", so the relevant product is State
+      RegData; a connector must aggregate restrictions and words per state from
+      that bulk file rather than expecting a ready-made summary.
+
+      The direct S3 link supplied alongside this endpoint
+      (State-RegData-5-0_Statutes.zip, 89.6 MB, Last-Modified 2023-11-22,
+      verified HTTP 200) does not correspond to any product currently listed on
+      the download page, which offers State RegData 2023 and a Definitive
+      Edition instead. Pin the exact product before writing the connector.
 
   # -- Feeds map/chart outputs only, not an index indicator -----------------
 
@@ -877,7 +946,7 @@ sources:
     staleness:
       warn_after_days: 550
       fail_after_days: 730
-    steward: TODO
+    steward: jonekberg
     can_commit_raw: true
     license: "RMI internal compilation"
     manual_instructions: >

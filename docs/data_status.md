@@ -12,36 +12,34 @@ as fresh.
 
 | | Source | Vintage | Age | SLA (warn/fail) | Cadence | Steward | Indicators |
 |---|---|---|---|---|---|---|---|
-| &#x1F534; | `clean_investment_monitor`<br><sub>Clean Investment Monitor quarterly investment and facility data</sub> | 2025_Q2.20250811.0 | 401d | 150 / 240 | quarterly | **unassigned** | 4 |
-| &#x1F534; | `bnef_datacenter_capacity`<br><sub>BloombergNEF Global Data Center Live IT Capacity Database</sub> | 2025-08-08 | 404d | 150 / 240 | quarterly | **unassigned** | 2 |
-| &#x1F534; | `eia_861m_sales_revenue`<br><sub>EIA-861M retail sales and revenue by state and sector</sub> | 2025-M11 | 290d | 60 / 120 | monthly | **unassigned** | 2 |
-| &#x1F534; | `afdc_ev_registrations`<br><sub>DOE AFDC EV registration counts by state</sub> | 2023-registrations | 740d | 400 / 550 | annual | **unassigned** | 1 |
-| &#x1F534; | `afdc_station_counts`<br><sub>DOE AFDC historical alternative fuelling station counts</sub> | 2024 | 624d | 400 / 550 | annual | **unassigned** | 1 |
-| &#x1F534; | `eig_dynamism`<br><sub>EIG Index of State Dynamism</sub> | 2022 | 1355d | 550 / 730 | irregular | **unassigned** | 1 |
-| &#x1F534; | `lbnl_interconnection_queue`<br><sub>LBNL Queued Up interconnection queue data</sub> | thru2024_v2 | 624d | 400 / 550 | annual | **unassigned** | 1 |
-| &#x1F534; | `census_county_population`<br><sub>Census county population estimates</sub> | co-est2023 | 916d | 400 / 550 | annual | **unassigned** | &mdash; <sub>(support)</sub> |
-| &#x26AA; | `bls_qcew`<br><sub>BLS Quarterly Census of Employment and Wages, county level</sub> | &mdash; | unknown | 150 / 240 | quarterly | **unassigned** | 2 |
-| &#x26AA; | `rmi_feasibility`<br><sub>RMI industry feasibility model output</sub> | &mdash; | unknown | 550 / 730 | irregular | **unassigned** | 2 |
-| &#x26AA; | `sia_semiconductor_investment`<br><sub>SIA chip supply-chain investment announcements</sub> | &mdash; | unknown | 550 / 730 | irregular | **unassigned** | 2 |
-| &#x26AA; | `bea_sqgdp`<br><sub>BEA quarterly GDP by state and industry</sub> | SQGDP9__ALL_AREAS_2005_2025 | unknown | 150 / 240 | quarterly | **unassigned** | 1 |
-| &#x26AA; | `climate_legislation`<br><sub>State climate and energy legislation tracker</sub> | &mdash; | unknown | 550 / 730 | irregular | **unassigned** | 1 |
-| &#x26AA; | `cnbc_state_rankings`<br><sub>CNBC America's Top States for Business -- infrastructure sub-rank</sub> | &mdash; | unknown | 400 / 550 | annual | **unassigned** | 1 |
-| &#x26AA; | `cpcn_requirements`<br><sub>Certificate of Public Convenience and Necessity requirements by state</sub> | &mdash; | unknown | 730 / 1095 | static | **unassigned** | 1 |
-| &#x26AA; | `dev_program_db`<br><sub>State economic development programme inventory (dbo_Program)</sub> | &mdash; | unknown | 550 / 730 | &mdash; | **unassigned** | 1 |
-| &#x26AA; | `dsire_policy_count`<br><sub>DSIRE state policy count</sub> | &mdash; | unknown | 550 / 730 | &mdash; | **unassigned** | 1 |
-| &#x26AA; | `gjf_subsidy_tracker`<br><sub>Good Jobs First Subsidy Tracker (RMI-prepared extract)</sub> | awards-through-2024 | unknown | 550 / 730 | irregular | **unassigned** | 1 |
-| &#x26AA; | `nrel_supply_curve`<br><sub>Renewable technical potential index (from NREL supply curve)</sub> | &mdash; | unknown | 550 / 730 | irregular | **unassigned** | 1 |
-| &#x26AA; | `regdata_subnational`<br><sub>RegData subnational regulatory restrictions</sub> | 2020-2022 | unknown | 550 / 730 | irregular | **unassigned** | 1 |
-| &#x26AA; | `rmi_employment_lq`<br><sub>Electro-industrial employment location quotient</sub> | &mdash; | unknown | 400 / 550 | annual | **unassigned** | 1 |
-| &#x26AA; | `solar_ordinances`<br><sub>Local solar ordinance records</sub> | &mdash; | unknown | 550 / 730 | &mdash; | **unassigned** | 1 |
-| &#x26AA; | `spot_gap_analysis`<br><sub>SPOT policy score (50 State Gap Analysis workbook)</sub> | &mdash; | unknown | 550 / 730 | &mdash; | **unassigned** | 1 |
-| &#x26AA; | `state_sepa`<br><sub>State Environmental Policy Act analogue presence</sub> | &mdash; | unknown | 730 / 1095 | static | **unassigned** | 1 |
-| &#x26AA; | `bea_sagdp`<br><sub>BEA annual GDP by state</sub> | SAGDP9__ALL_AREAS_1997_2024 | unknown | 400 / 550 | annual | **unassigned** | &mdash; <sub>(support)</sub> |
-| &#x26AA; | `census_tiger_states`<br><sub>Census TIGER/Line state boundaries (via tigris)</sub> | TIGER2023 | unknown | 400 / 550 | annual | **unassigned** | &mdash; <sub>(support)</sub> |
-| &#x26AA; | `drone_facility_announcements`<br><sub>US drone manufacturing facility announcements</sub> | 2022-2025 | unknown | 550 / 730 | irregular | **unassigned** | &mdash; <sub>(support)</sub> |
-| &#x26AA; | `fcc_pea_county_crosswalk`<br><sub>FCC PEA-to-county crosswalk</sub> | FCC-PEA | unknown | 730 / 1095 | static | **unassigned** | &mdash; <sub>(support)</sub> |
-| &#x26AA; | `fcc_pea_shapefile`<br><sub>FCC Partial Economic Area boundaries</sub> | FCC-PEA | unknown | 730 / 1095 | static | **unassigned** | &mdash; <sub>(support)</sub> |
-| &#x1F7E1; | `eia_860m_generators`<br><sub>EIA-860M preliminary monthly generator inventory</sub> | 2026-M05 | 108d | 60 / 120 | monthly | **unassigned** | 2 |
-
-> **30 of 30 sources have no steward.** A stale source with no owner generates an issue nobody is assigned to. Populate `config/stewards.yml` from `config/stewards.example.yml`.
+| &#x1F534; | `clean_investment_monitor`<br><sub>Clean Investment Monitor quarterly investment and facility data</sub> | 2025_Q2.20250811.0 | 401d | 150 / 240 | quarterly | jonekberg | 4 |
+| &#x1F534; | `bnef_datacenter_capacity`<br><sub>BloombergNEF Global Data Center Live IT Capacity Database</sub> | 2025-08-08 | 404d | 150 / 240 | quarterly | bsf-rmi | 2 |
+| &#x1F534; | `eia_861m_sales_revenue`<br><sub>EIA-861M retail sales and revenue by state and sector</sub> | 2025-M11 | 290d | 60 / 120 | monthly | jonekberg | 2 |
+| &#x1F534; | `afdc_ev_registrations`<br><sub>DOE AFDC EV registration counts by state</sub> | 2023-registrations | 740d | 400 / 550 | annual | jonekberg | 1 |
+| &#x1F534; | `afdc_station_counts`<br><sub>DOE AFDC historical alternative fuelling station counts</sub> | 2024 | 624d | 400 / 550 | annual | jonekberg | 1 |
+| &#x1F534; | `eig_dynamism`<br><sub>EIG Index of State Dynamism</sub> | 2022 | 1355d | 550 / 730 | irregular | jonekberg | 1 |
+| &#x1F534; | `lbnl_interconnection_queue`<br><sub>LBNL Queued Up interconnection queue data</sub> | thru2024_v2 | 624d | 400 / 550 | annual | jonekberg | 1 |
+| &#x1F534; | `census_county_population`<br><sub>Census county population estimates</sub> | co-est2023 | 916d | 400 / 550 | annual | jonekberg | &mdash; <sub>(support)</sub> |
+| &#x26AA; | `bls_qcew`<br><sub>BLS Quarterly Census of Employment and Wages, county level</sub> | &mdash; | unknown | 150 / 240 | quarterly | jonekberg | 2 |
+| &#x26AA; | `rmi_feasibility`<br><sub>RMI industry feasibility model output</sub> | &mdash; | unknown | 550 / 730 | irregular | jonekberg | 2 |
+| &#x26AA; | `sia_semiconductor_investment`<br><sub>SIA chip supply-chain investment announcements</sub> | &mdash; | unknown | 550 / 730 | irregular | jonekberg | 2 |
+| &#x26AA; | `bea_sqgdp`<br><sub>BEA quarterly GDP by state and industry</sub> | SQGDP9__ALL_AREAS_2005_2025 | unknown | 150 / 240 | quarterly | jonekberg | 1 |
+| &#x26AA; | `climate_legislation`<br><sub>State climate and energy legislation tracker</sub> | &mdash; | unknown | 550 / 730 | irregular | jonekberg | 1 |
+| &#x26AA; | `cnbc_state_rankings`<br><sub>CNBC America's Top States for Business -- infrastructure sub-rank</sub> | &mdash; | unknown | 400 / 550 | annual | jonekberg | 1 |
+| &#x26AA; | `cpcn_requirements`<br><sub>Certificate of Public Convenience and Necessity requirements by state</sub> | &mdash; | unknown | 730 / 1095 | static | jonekberg | 1 |
+| &#x26AA; | `dev_program_db`<br><sub>State economic development programme inventory (dbo_Program)</sub> | &mdash; | unknown | 400 / 550 | annual | lrcarey222 | 1 |
+| &#x26AA; | `dsire_policy_count`<br><sub>DSIRE state policy count</sub> | &mdash; | unknown | 150 / 240 | quarterly | lrcarey222 | 1 |
+| &#x26AA; | `gjf_subsidy_tracker`<br><sub>Good Jobs First Subsidy Tracker (RMI-prepared extract)</sub> | awards-through-2024 | unknown | 550 / 730 | irregular | jonekberg | 1 |
+| &#x26AA; | `nrel_supply_curve`<br><sub>Renewable technical potential index (from NREL supply curve)</sub> | &mdash; | unknown | 550 / 730 | irregular | jonekberg | 1 |
+| &#x26AA; | `regdata_subnational`<br><sub>RegData subnational regulatory restrictions</sub> | 2020-2022 | unknown | 550 / 730 | irregular | lrcarey222 | 1 |
+| &#x26AA; | `rmi_employment_lq`<br><sub>Electro-industrial employment location quotient</sub> | &mdash; | unknown | 400 / 550 | annual | jonekberg | 1 |
+| &#x26AA; | `solar_ordinances`<br><sub>Local solar ordinance records</sub> | &mdash; | unknown | 550 / 730 | irregular | lrcarey222 | 1 |
+| &#x26AA; | `spot_gap_analysis`<br><sub>SPOT policy score (50 State Gap Analysis workbook)</sub> | &mdash; | unknown | 550 / 730 | irregular | lrcarey222 | 1 |
+| &#x26AA; | `state_sepa`<br><sub>State Environmental Policy Act analogue presence</sub> | &mdash; | unknown | 730 / 1095 | static | jonekberg | 1 |
+| &#x26AA; | `bea_sagdp`<br><sub>BEA annual GDP by state</sub> | SAGDP9__ALL_AREAS_1997_2024 | unknown | 400 / 550 | annual | jonekberg | &mdash; <sub>(support)</sub> |
+| &#x26AA; | `census_tiger_states`<br><sub>Census TIGER/Line state boundaries (via tigris)</sub> | TIGER2023 | unknown | 400 / 550 | annual | jonekberg | &mdash; <sub>(support)</sub> |
+| &#x26AA; | `drone_facility_announcements`<br><sub>US drone manufacturing facility announcements</sub> | 2022-2025 | unknown | 550 / 730 | irregular | jonekberg | &mdash; <sub>(support)</sub> |
+| &#x26AA; | `fcc_pea_county_crosswalk`<br><sub>FCC PEA-to-county crosswalk</sub> | FCC-PEA | unknown | 730 / 1095 | static | jonekberg | &mdash; <sub>(support)</sub> |
+| &#x26AA; | `fcc_pea_shapefile`<br><sub>FCC Partial Economic Area boundaries</sub> | FCC-PEA | unknown | 730 / 1095 | static | jonekberg | &mdash; <sub>(support)</sub> |
+| &#x1F7E1; | `eia_860m_generators`<br><sub>EIA-860M preliminary monthly generator inventory</sub> | 2026-M05 | 108d | 60 / 120 | monthly | jonekberg | 2 |
 
