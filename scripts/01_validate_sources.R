@@ -40,6 +40,11 @@ index_definition <- yaml::read_yaml(file.path(repo_root, "config", "index_defini
 
 problems <- validate_sources_registry(registry, index_definition)
 
+# Two files naming owners is two chances to disagree. Optional: absent until a
+# steward map has been created.
+stewards <- load_stewards(repo_root)
+problems <- c(problems, validate_stewards(registry, stewards))
+
 n_sources <- length(registry$sources)
 declared <- unique(unlist(
   lapply(index_definition$categories %||% list(), function(d) d$variables %||% character(0)),
@@ -59,6 +64,14 @@ cat(sprintf(
   "validate_sources: %d sources, all %d indicators claimed exactly once\n",
   n_sources, length(declared)
 ))
+if (is.null(stewards)) {
+  cat("validate_sources: no config/stewards.yml -- steward cross-check skipped\n")
+} else {
+  cat(sprintf(
+    "validate_sources: %d steward(s), consistent with config/sources.yml\n",
+    length(stewards$stewards)
+  ))
+}
 
 # Visibility, not a failure: count the decisions still outstanding. These are
 # conservative defaults awaiting a human, and the registry is honest about them

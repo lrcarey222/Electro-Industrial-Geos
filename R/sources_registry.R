@@ -170,3 +170,103 @@ validate_sources_registry <- function(registry, index_definition) {
 
   problems
 }
+
+#' Load the steward map, if one exists
+#'
+#' `config/stewards.yml` is optional: the registry validates without it, and the
+#' notifier's own gate is what refuses to file unassigned issues. When it is
+#' present it must agree with `config/sources.yml`.
+#'
+#' @param root Repo root.
+#' @return List with `stewards` and `path`, or NULL when no map is present.
+#' @export
+load_stewards <- function(root = find_repo_root()) {
+  path <- Sys.getenv("EIG_STEWARDS", fs::path(root, "config", "stewards.yml"))
+  if (!file.exists(path)) {
+    return(NULL)
+  }
+  parsed <- yaml::read_yaml(path)
+  list(stewards = parsed$stewards %||% list(), path = path)
+}
+
+#' Validate the steward map against the registry
+#'
+#' Two files naming owners is two chances to disagree. A source assigned to
+#' somebody who is not in the map produces an issue assigned to nobody, which is
+#' the failure mode the whole steward gate exists to prevent -- so catch it in CI
+#' rather than at 8am on a Monday.
+#'
+#' @param registry Result of `load_sources_registry()`.
+#' @param stewards Result of `load_stewards()`; NULL is valid and skips checks.
+#' @return Character vector of problems; empty when valid.
+#' @export
+validate_stewards <- function(registry, stewards) {
+  if (is.null(stewards)) {
+    return(character(0))
+  }
+  problems <- character(0)
+  add <- function(...) problems <<- c(problems, paste0(...))
+
+  handles <- vapply(
+    stewards$stewards,
+    function(s) as.character(s$github_handle %||% NA_character_),
+    character(1)
+  )
+  if (anyNA(handles) || any(!nzchar(handles))) {
+    add("Every steward needs a github_handle.")
+  }
+  dup <- unique(handles[!is.na(handles) & duplicated(handles)])
+  if (length(dup) > 0) {
+    add("Duplicate github_handle(s) in the steward map: ", paste(dup, collapse = ", "), ".")
+  }
+
+  assigned <- vapply(
+    registry$sources,
+    function(s) as.character(s$steward %||% NA_character_),
+    character(1)
+  )
+  ids <- vapply(registry$sources, function(s) as.character(s$id), character(1))
+
+  # A handle in sources.yml that nobody in the map answers for.
+  unknown_handles <- setdiff(stats::na.omit(unique(assigned)), c(handles, "TODO"))
+  if (length(unknown_handles) > 0) {
+    add(
+      "config/sources.yml assigns source(s) to handle(s) absent from ",
+      "config/stewards.yml: ", paste(sort(unknown_handles), collapse = ", "),
+      ". An issue assigned to an unrecognised handle lands unowned."
+    )
+  }
+
+  # sources_owned must match what sources.yml actually says.
+  for (s in stewards$stewards) {
+    handle <- as.character(s$github_handle %||% "")
+    claimed <- unlist(s$sources_owned %||% character(0), use.names = FALSE)
+    actual <- ids[!is.na(assigned) & assigned == handle]
+
+    missing_from_map <- setdiff(actual, claimed)
+    if (length(missing_from_map) > 0) {
+      add(
+        handle, ": config/sources.yml assigns these but sources_owned omits them: ",
+        paste(sort(missing_from_map), collapse = ", "), "."
+      )
+    }
+    not_theirs <- setdiff(claimed, actual)
+    if (length(not_theirs) > 0) {
+      add(
+        handle, ": sources_owned lists these but config/sources.yml does not assign them: ",
+        paste(sort(not_theirs), collapse = ", "), "."
+      )
+    }
+  }
+
+  # A backup must be a real steward id.
+  steward_ids <- vapply(stewards$stewards, function(s) as.character(s$id %||% ""), character(1))
+  for (s in stewards$stewards) {
+    backup <- s$backup %||% NULL
+    if (!is.null(backup) && !as.character(backup) %in% steward_ids) {
+      add(as.character(s$id), ": backup '", as.character(backup), "' is not a steward id.")
+    }
+  }
+
+  problems
+}
