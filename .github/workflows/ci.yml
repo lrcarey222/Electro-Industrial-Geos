@@ -54,6 +54,23 @@ jobs:
       # renv::init()/snapshot() -- see docs/refactor_plan.md F-19 and 3.5.
       # Keeping a step that only pretends to pin versions is worse than not
       # having one.
+      # The repository is public, so raw data that is not itself public must not
+      # be reachable through it. Any tracked file that .gitignore also excludes
+      # means someone re-added a licensed payload, most likely with `git add -f`.
+      - name: No licensed data tracked
+        shell: bash
+        run: |
+          set -euo pipefail
+          tracked_but_ignored=$(git ls-files -i -c --exclude-standard)
+          if [ -n "$tracked_but_ignored" ]; then
+            echo "::error::tracked files are excluded by .gitignore -- a licensed payload may have been committed"
+            echo "$tracked_but_ignored"
+            echo
+            echo "See docs/refactor_plan.md F-13. Untrack with:"
+            echo "  git rm --cached <path>"
+            exit 1
+          fi
+          echo "no tracked file is gitignored"
       - name: Secret scan
         run: |
           if git grep -nE "(AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z\-_]{35}|ghp_[0-9A-Za-z]{36}|password\s*=|secret\s*=|token\s*=)" -- .; then

@@ -4,3 +4,37 @@
 .Ruserdata
 outputs/
 data/raw_cache/
+
+# ---------------------------------------------------------------------------
+# Licensed and non-public raw data.
+#
+# This repository is public. Raw data that is not itself public must not be
+# accessible through it. Sources marked `can_commit_raw: false` in
+# config/sources.yml belong here; stewards keep their local copies outside git,
+# or under the directory named by EIG_MANUAL_DIR.
+#
+# Only the manifest entry for these sources is committed -- the vintage, hash,
+# row count and schema fingerprint in data/_state/manifest.csv. That is enough
+# to prove which version produced a published number without redistributing the
+# payload.
+#
+# Removing a path here does NOT remove it from git history. See
+# docs/refactor_plan.md F-13.
+# ---------------------------------------------------------------------------
+
+# BloombergNEF -- commercial subscription, redistribution prohibited
+data/raw/BNEF/
+
+# Good Jobs First Subsidy Tracker -- redistribution not permitted
+data/raw/Good Jobs First/
+
+# Belt and braces: catch these payloads wherever they are dropped
+**/*Global Data Center Live IT Capacity Database*
+gjf_complete.csv
+
+# Manual drop payloads for licensed sources. Templates and READMEs under
+# data/manual/ stay tracked; the data files do not.
+data/manual/**/*.csv
+data/manual/**/*.xlsx
+data/manual/**/*.zip
+!data/manual/**/TEMPLATE.csv
