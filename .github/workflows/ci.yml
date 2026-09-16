@@ -26,6 +26,23 @@ jobs:
       # provenance and no owner.
       - name: Validate source registry
         run: Rscript scripts/01_validate_sources.R
+      # Informational only. A stale source is a fact to be surfaced and owned,
+      # not a reason to fail someone's unrelated code change, so exit codes 1
+      # (warn/pending) and 2 (fail) are reported and tolerated here. The
+      # scheduled data-freshness workflow is what acts on them. Anything above 2
+      # is a crash and does fail the build.
+      - name: Data status report
+        shell: bash
+        run: |
+          set +e
+          Rscript scripts/02_check_freshness.R --no-write
+          code=$?
+          set -e
+          echo "freshness exit code: $code"
+          if [ "$code" -gt 2 ]; then
+            echo "::error::freshness check crashed (exit $code)"
+            exit "$code"
+          fi
       # The `Restore renv` step was removed here. renv.lock is a hand-written
       # stub whose 18 entries carry only Package and Version -- no Source,
       # Repository or Hash -- so renv::restore() aborts in
