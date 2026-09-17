@@ -502,7 +502,10 @@ eia_raw <- read_optional_xlsx(eia_path, sheet = 1, start_row = 3)
 electricity_price <- NULL
 if (!is.null(eia_raw)) {
   eia_raw <- eia_raw %>% janitor::clean_names()
-  price_col <- intersect(names(eia_raw), names(eia_raw)[stringr::str_detect(names(eia_raw), "cents.*k_wh")])[1]
+  # Resolve the INDUSTRIAL block from the sector header rather than taking the
+  # first Cents/kWh column, which is RESIDENTIAL (F-04).
+  price_idx <- eia_price_column_index(eia_path, sheet = 1, sector = "INDUSTRIAL")
+  price_col <- if (price_idx <= ncol(eia_raw)) names(eia_raw)[price_idx] else NA_character_
   if (!is.na(price_col)) {
     ind_price_m <- eia_raw %>%
       dplyr::mutate(ind_price_m = .data[[price_col]]) %>%
@@ -1040,10 +1043,20 @@ if (is.null(cluster_manufacturing)) {
 # Pull the latest EIA monthly sales file via cache (if needed), then compute a
 # current-year state table used in final joins.
 eia_sales <- load_remote_eia_sales(paths, raw_dir)
-industrial_electricity_price <- tibble::tibble(State = character(), ind_price_m = numeric())
+industrial_electricity_price <- tibble::tibble(
+  State = character(),
+  industrial_electricity_price = numeric()
+)
 if (!is.null(eia_sales)) {
   eia_sales <- janitor::clean_names(eia_sales)
-  price_col <- intersect(names(eia_sales), names(eia_sales)[stringr::str_detect(names(eia_sales), "cents.*k_wh")])[1]
+  # Same fix as above: resolve INDUSTRIAL from the sector header (F-04).
+  eia_sales_path <- fs::path(raw_dir, "remote", "sales_revenue.xlsx")
+  price_idx <- if (fs::file_exists(eia_sales_path)) {
+    eia_price_column_index(eia_sales_path, sheet = 1, sector = "INDUSTRIAL")
+  } else {
+    NA_integer_
+  }
+  price_col <- if (!is.na(price_idx) && price_idx <= ncol(eia_sales)) names(eia_sales)[price_idx] else NA_character_
   if (!is.na(price_col)) {
     ind_price_m <- eia_sales %>%
       dplyr::mutate(ind_price_m = .data[[price_col]]) %>%
@@ -1054,13 +1067,16 @@ if (!is.null(eia_sales)) {
       dplyr::summarize(ind_price_m = mean(.data$ind_price_m, na.rm = TRUE), .groups = "drop")
 
     this_year <- as.integer(format(Sys.Date(), "%Y"))
+    # Emit the contract column name. This previously emitted `ind_price_m`, so
+    # the join below added a stray column no sub-index reads while
+    # industrial_electricity_price kept its sample values (F-05).
     industrial_electricity_price <- ind_price_a %>%
       dplyr::filter(.data$year %in% c(this_year, this_year - 1)) %>%
       dplyr::arrange(dplyr::desc(.data$year)) %>%
       dplyr::group_by(.data$state) %>%
       dplyr::slice(1) %>%
       dplyr::ungroup() %>%
-      dplyr::transmute(State = .data$state, ind_price_m)
+      dplyr::transmute(State = .data$state, industrial_electricity_price = .data$ind_price_m)
   }
 }
 
@@ -1311,7 +1327,10 @@ raw_updates <- states %>%
   safe_left_join(clean_electric_capacity_growth, by = "state") %>%
   safe_left_join(datacenter_mw, by = "state") %>%
   safe_left_join(semiconductor_manufacturing, by = "state") %>%
-  safe_left_join(cluster_manufacturing, by = c("abbr"="state")) %>%
+  # cluster_manufacturing emits `state` as a FULL state name, so joining it on
+  # `abbr` matched 0 of 35 rows and the three manufacturing indicators silently
+  # kept their sample values (F-20). Join on the same key as every other table.
+  safe_left_join(cluster_manufacturing, by = "state") %>%
   safe_left_join(industrial_electricity_price, by = c("abbr"="State")) %>%
   safe_left_join(workforce_share_update, by = "state") %>%
   safe_left_join(workforce_growth_update, by = "state")
@@ -1345,9 +1364,11 @@ processed_inputs <- processed_inputs %>%
     battery_manufacturing = dplyr::coalesce(`battery_manufacturing.raw`, battery_manufacturing),
     solar_manufacturing = dplyr::coalesce(`solar_manufacturing.raw`, solar_manufacturing),
     ev_manufacturing = dplyr::coalesce(`ev_manufacturing.raw`, ev_manufacturing),
-    industrial_electricity_price = dplyr::coalesce(industrial_electricity_price),
-    #workforce_share = dplyr::coalesce(`workforce_share.raw`, workforce_share),
-    #workforce_growth = dplyr::coalesce(`workforce_growth.raw`, workforce_growth)
+    industrial_electricity_price = dplyr::coalesce(
+      `industrial_electricity_price.raw`, industrial_electricity_price
+    ),
+    workforce_share = dplyr::coalesce(`workforce_share.raw`, workforce_share),
+    workforce_growth = dplyr::coalesce(`workforce_growth.raw`, workforce_growth)
   ) %>%
   dplyr::select(-dplyr::ends_with(".raw"))
 

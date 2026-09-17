@@ -19,16 +19,16 @@ Severity is about the published index, not about code tidiness.
 |---|---|---|---|
 | [F-01](#f-01) | **blocker** | The pipeline does not run: `scripts/07_process_data.R` fails to parse | ✅ fixed in step 0a |
 | [F-02](#f-02) | **blocker** | The canonical methodology script does not parse and is not self-contained | ⚠️ **reopened** — a working upstream was found, see [`legacy_parity.md`](legacy_parity.md) |
-| [F-22](#f-22) | **high** | The refactor doubled the employment NAICS bundle; fixing F-05 would ship that silently | needs your decision **before** F-05 |
+| [F-22](#f-22) | **high** | The refactor doubled the employment NAICS bundle; fixing F-05 would ship that silently | ✅ decided 2026-09-17: **broad** definition, documented in `methodology.md` |
 | [F-03](#f-03) | **high** | The test suite executes zero assertions; the one parity check compares against `NULL` | ✅ fixed in step 0b |
-| [F-04](#f-04) | **high** | EIA electricity price reads the **residential** column, not industrial — a regression against the committed vintage | issue → separate PR |
-| [F-05](#f-05) | **high** | `industrial_electricity_price` is joined under the wrong column name, so the indicator keeps sample data | issue → separate PR |
+| [F-04](#f-04) | **high** | EIA electricity price reads the **residential** column, not industrial — a regression against the committed vintage | ✅ fixed, with a diff report |
+| [F-05](#f-05) | **high** | `industrial_electricity_price` is joined under the wrong column name, so the indicator keeps sample data | ✅ fixed (price half); workforce half still gated on `blsAPI` |
 | [F-06](#f-06) | **high** | `SQGDP.zip` is read but never downloaded; BEA filenames are hard-coded with years and fail silently | Phase 2 |
 | [F-07](#f-07) | medium | The AFDC station-count parser reads unnamed columns positionally | Phase 2 |
 | [F-08](#f-08) | medium | The BNEF snapshot date is hard-coded, so a refreshed file yields zero rows | Phase 3 |
 | [F-09](#f-09) | medium | One CIM directory holds two different release vintages, and the facility schema gate fails silently | Phase 1 / 2 |
 | [F-10](#f-10) | medium | `FCC_PEA_website.xlsx` is read but untracked and unregistered | ✅ fixed in step 0c |
-| [F-20](#f-20) | **high** | The manufacturing fallback joins on the wrong key type, so three cluster indicators silently keep sample data | issue → separate PR |
+| [F-20](#f-20) | **high** | The manufacturing fallback joins on the wrong key type, so three cluster indicators silently keep sample data | ✅ fixed, with a diff report |
 | [F-21](#f-21) | medium | A PEA spanning a state border emits duplicate `economic_area` rows | needs your decision |
 | [F-11](#f-11) | medium | Live network reads sit at script top level, breaking the no-network CI rule | Phase 2 |
 | [F-12](#f-12) | **high** | 19 of 21 staged EIA-860M workbooks are byte-identical HTML error pages; three are committed | Phase 2 |
@@ -1011,10 +1011,14 @@ it further still.
 materially different concept with no decision taken and nothing written down —
 `docs/methodology.md` still describes the narrow definition.
 
-**Remedy: decide, then fix F-05 — in that order.** Is the electro-industrial workforce electrical
-equipment manufacturing, or that plus utilities and telecom? Both are defensible; only the first is
-documented. Whichever is chosen, `docs/methodology.md` and `config/index_definition.yml` should say
-so explicitly, because the current state is a constant in a script disagreeing with the prose.
+**Decided 2026-09-17: the broad definition stands** — manufacturing plus utilities plus
+telecommunications, i.e. the 39 codes currently in `electric_man_6d`. No code change was needed;
+what was missing was the decision being written down. It now is, in
+[`methodology.md`](methodology.md#the-electro-industrial-naics-bundle), together with the fact that
+it diverges from the upstream's 19-code manufacturing-only bundle and that the four-digit truncation
+widens it further.
+
+This unblocked F-05.
 
 ---
 
