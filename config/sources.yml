@@ -146,9 +146,9 @@ sources:
     feeds: [workforce_share, workforce_growth]
     publisher: "U.S. Bureau of Labor Statistics"
     access_class: api
-    endpoint: "https://data.bls.gov/cew/data/api/{year}/{quarter}/area/{area_code}.csv"
+    endpoint: "https://data.bls.gov/cew/data/api/{year}/{quarter}/industry/{industry_code}.csv"
     auth_env: null
-    geography: county-rolled-up
+    geography: state
     cadence: quarterly
     typical_release_lag_days: 150
     refresh_cron: "0 9 15 3,6,9,12 *"
@@ -159,10 +159,34 @@ sources:
     can_commit_raw: true
     license: "Public domain (US Government work)"
     notes: >
-      Open data, no key. The existing implementation issues ~3,100 requests per
-      quarter pulled, twice, via blsAPI::blsQCEW(); a connector should use the
-      bulk single-file endpoint instead. blsAPI was archived from CRAN in 2021
-      (F-16). Both indicators currently hold sample data only (F-05).
+      Open data, no key, no registration. Endpoint verified 2026-09-17; latest
+      available period is 2026 Q1. An industry slice carries every geography for
+      that NAICS code -- national, state, MSA and county -- so ~39 requests
+      totalling ~1.5 MB replace the current design's ~6,200 requests and ~440 MB
+      of county files.
+
+      `geography` is recorded as `state`, not `county-rolled-up`, which is a
+      change from the existing implementation and the point of the redesign:
+      rolling up county data recovers only about 45% of the employment the same
+      industry reports at state level, because QCEW suppresses small cells and
+      suppression rises steeply as geography narrows.
+
+      CRITICAL: suppressed cells arrive as 0, not NA (disclosure_code == "N"),
+      and the current code sums with na.rm = TRUE -- so withheld reads as none.
+      For NAICS 334210 in 2024, 272 of 313 rows are suppressed and all 272
+      report 0 employment.
+
+      Two of the bundle's 6-digit codes, 335911 and 335912 (battery
+      manufacturing), return 404 at 6-digit detail, so a connector must tolerate
+      an absent slice rather than treating it as a failure.
+
+      Neither indicator has ever been computed from real data: the guard tests
+      requireNamespace("blsQCEW"), and no such package exists in this repo or the
+      upstream. blsAPI, which does provide blsQCEW(), was archived from CRAN in
+      2021 (F-16). Both indicators currently hold sample data only (F-05).
+
+      Full measurements, options and the outstanding decisions:
+      docs/bls_qcew_options.md
 
   - id: eig_dynamism
     label: "EIG Index of State Dynamism"
