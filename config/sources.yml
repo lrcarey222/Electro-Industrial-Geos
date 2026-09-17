@@ -185,6 +185,22 @@ sources:
       upstream. blsAPI, which does provide blsQCEW(), was archived from CRAN in
       2021 (F-16). Both indicators currently hold sample data only (F-05).
 
+      Decisions taken 2026-09-17: suppressed cells are treated as NA, and the
+      bundle is read at 4-digit depth (19% state-level suppression across the
+      published bundle codes, against 84% at county level).
+
+      OUTSTANDING: 9 of the bundle's 10 telecom/broadcasting codes return 404 in
+      QCEW, as do 4 of their 5 four-digit parents, so the broad bundle's telecom
+      third currently matches no published series. QCEW does publish 517111,
+      517112, 517121, 516 and 5161, so the industries exist under different
+      codes and the bundle appears to mix NAICS vintages. Remapping is a
+      methodology change and needs a human decision.
+
+      PEA-level workforce is not achievable from QCEW: 181 of 410 PEAs would
+      have no disclosed bundle employment at all and the median PEA is 94%
+      suppressed. PEAs currently inherit their state's value by join, so the
+      county roll-up can be dropped without loss.
+
       Full measurements, options and the outstanding decisions:
       docs/bls_qcew_options.md
 

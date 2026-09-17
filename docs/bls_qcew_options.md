@@ -148,3 +148,127 @@ Three questions, none of which are mine to answer, because each changes what the
 
 Until (1) and (2) are answered, a connector would be encoding a methodology choice by default —
 which is how the current understatement arrived in the first place.
+
+---
+
+## 6. Do the PEA cluster indices need county data?
+
+**Not as currently implemented — and QCEW could not supply it if they did.**
+
+### 6.1 What the PEA path does today
+
+The county pull is aggregated straight to **state** at
+[`07_process_data.R:1240`](../scripts/07_process_data.R#L1240) (`group_by(state_abbr)`), and the
+county granularity is discarded before anything PEA-related happens. The PEA cluster inputs then
+acquire their workforce figures by joining **on state**
+([`:1493-1504`](../scripts/07_process_data.R#L1493)):
+
+    cluster_pea_inputs <- pea_indicator_rollup %>%
+      dplyr::left_join(
+        validated_inputs %>% dplyr::select(state, workforce_share, workforce_growth, ...),
+        by = "state"
+      )
+
+So every PEA inherits its state's value. Of the 13 PEA cluster inputs, **five are state values
+broadcast to every PEA in that state** — `workforce_share`, `workforce_growth`,
+`industry_feasibility`, `clean_electric_capacity_growth`, `industrial_electricity_price` — and only
+the five facility anchors (`datacenter_mw`, `semiconductor_manufacturing`,
+`battery_manufacturing`, `solar_manufacturing`, `ev_manufacturing`) are genuinely PEA-level, via
+point-in-polygon.
+
+Dropping the county roll-up therefore loses nothing that is currently used.
+
+### 6.2 But it is a real gap, and worth naming
+
+Because five of thirteen inputs are constant within a state, **PEAs inside the same state are
+differentiated only by the facility anchors.** Workforce contributes nothing to telling
+Los Angeles apart from Fresno. That is a genuine weakness of the PEA index, and the instinct that
+county data ought to be involved is the right one.
+
+### 6.3 QCEW cannot close it
+
+Measured over the broad bundle's published 4-digit codes, 2024 annual, private ownership,
+suppressed cells treated as `NA`, counties mapped to PEAs through the FCC crosswalk (3,236
+counties to 416 PEAs):
+
+| level | rows | suppressed | employment | share of state total |
+|---|---|---|---|---|
+| national | 6 | 0 | 862,681 | — |
+| **state** | 305 | 59 (19%) | **839,731** | **97% of national** |
+| MSA | 1,654 | 1,483 (90%) | 96,289 | 11% |
+| county | 6,123 | 5,161 (84%) | 406,710 | 48% |
+| **PEA** (county to PEA) | 5,864 matched | median **94%** within a PEA | 384,978 | **46%** |
+
+And the distribution is the decisive part. Of 410 PEAs with any matched county:
+
+| disclosed bundle cells | PEAs |
+|---|---|
+| **0** | **181** |
+| 1 | 103 |
+| 2 | 46 |
+| 3–5 | 47 |
+| 6–10 | 16 |
+| >10 | 17 |
+
+**181 PEAs — 44% — would have no disclosed bundle employment at all**, and a further 149 would rest
+on one or two cells. A PEA-level `workforce_share` from QCEW would be empty for nearly half the
+PEAs and single-establishment noise for most of the rest, while understating the total by more than
+half.
+
+MSA-level is worse still (11% of the state total), so it is not a workaround.
+
+### 6.4 Options, if PEA differentiation on workforce matters
+
+1. **Keep the state broadcast** and document it — the honest status quo. The PEA index is then
+   explicitly "state economic context plus local facility anchors", which is a defensible thing to
+   publish as long as it is described that way.
+2. **Use a source with less suppression.** Census LEHD/LODES is block-level workforce data with a
+   different confidentiality model (noise infusion rather than cell suppression), and County
+   Business Patterns publishes employment-range flags rather than blanks. Both would need
+   evaluating; neither is free.
+3. **Aggregate to a coarser geography than PEA.** State is 97% complete; anything between is where
+   the data thins out.
+
+Recommendation: **(1) for now, documented**, and treat (2) as separate work with its own evaluation
+rather than bolting it onto this connector.
+
+---
+
+## 7. Nine of the bundle's ten telecom codes do not exist in QCEW
+
+This affects the F-22 broad-bundle decision directly, and was found while testing which slices are
+retrievable.
+
+Of the 39 six-digit codes in `electric_man_6d`, the telecom and broadcasting block returns **404**
+for nine of ten, at 2024 annual:
+
+| code | QCEW |
+|---|---|
+| `513322`, `513340`, `513390` | 404 |
+| `515210` | 404 |
+| `517210`, `517211`, `517212` | 404 |
+| `517410` | **200** |
+| `517910`, `517919` | 404 |
+
+Their 4-digit parents behave the same way: `5133`, `5152`, `5172`, `5179` all 404; only `5174`
+resolves.
+
+QCEW does publish telecommunications and broadcasting industries — `517111`, `517112`, `517121`,
+`516` and `5161` all return 200. So these industries are not absent from QCEW; **the bundle's codes
+do not match what QCEW publishes.** The codes appear to span more than one NAICS vintage, and the
+exact mapping needs someone who knows the NAICS 2022 restructure to confirm rather than me guessing
+at successors.
+
+**Consequence:** as written, the broad bundle's telecom third contributes **nothing** to
+`workforce_share` — not because those industries have no employment, but because nine of ten codes
+match no published series. In practice the broad definition currently behaves as *manufacturing +
+utilities + satellite telecommunications*.
+
+The manufacturing and utilities blocks are fine: `2211`, `3342`, `3351`, `3353` and `3359` all
+resolve.
+
+**This needs a decision before the connector is written.** Either remap the telecom codes to their
+NAICS 2022 equivalents — a methodology change that should be recorded, and which will alter what the
+indicator measures — or drop the telecom block and describe the bundle as manufacturing plus
+utilities. Silently shipping codes that match nothing would reproduce exactly the failure mode this
+whole exercise has been unpicking: an indicator that looks populated and is not.
