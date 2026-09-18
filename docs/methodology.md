@@ -61,12 +61,35 @@ defined bundle of six-digit NAICS codes (`electric_man_6d` in
 
 | block | codes | what it covers |
 |---|---|---|
-| Electrical equipment and electronic components | `334210`, `334220`, `334290`, `335110`, `335121`, `335122`, `335129`, `335311`, `335312`, `335313`, `335314`, `335911`, `335912`, `335921`, `335929`, `335931`, `335932`, `335991`, `335999` | manufacturing — 19 codes |
+| Computer and electronic product manufacturing | `334210`, `334220`, `334290` | communications and broadcast equipment — 3 codes |
+| Electrical equipment, appliance and component manufacturing | `335131`, `335132`, `335139`, `335311`, `335312`, `335313`, `335314`, `335910`, `335921`, `335929`, `335931`, `335932`, `335991`, `335999` | lighting, transformers, batteries, wiring devices, carbon and graphite — 14 codes |
 | Utilities | `221111`–`221121` | electric power generation: hydro, fossil, nuclear, solar, wind, geothermal, biomass — 10 codes |
-| Telecommunications and broadcasting | `513322`, `513340`, `513390`, `515210`, `517210`, `517211`, `517212`, `517410`, `517910`, `517919` | carriers, broadcasting, satellite — 10 codes |
+| Telecommunications and broadcasting | `516210`, `517112`, `517410`, `517810` | media streaming and social networks, wireless carriers, satellite, other telecommunications — 4 codes |
+
+33 codes, all **NAICS 2022** except `221119`, which QCEW tags `NAICS07` and whose
+successor cannot be established from the 2017-to-2022 concordance. Its parent
+`2211` is current, and the parent is what the filter uses.
 
 So the electro-industrial workforce is **manufacturing plus utilities plus
 telecommunications**, not manufacturing alone.
+
+The telecommunications block was remapped to NAICS 2022 on 2026-09-18. It
+previously held codes from three superseded vintages, so nine of ten matched no
+series BLS publishes and contributed nothing at all. Three codes — `513322`,
+`513340`, `513390` — were **dropped rather than remapped**: they are not NAICS in
+any vintage QCEW recognises, so what they were meant to denote cannot be
+recovered. If broadcasting was intended, the current codes are `516110` (radio)
+and `516120` (television), and adding them is a further decision. See
+[`bls_qcew_options.md` §7](bls_qcew_options.md).
+
+The four-digit parents actually used for retrieval are `2211`, `3342`, `3351`,
+`3353`, `3359`, `5162`, `5171`, `5174`, `5178` — all nine current and all nine
+retrievable from QCEW, against six of ten before the remap.
+
+One consequence of reading at four digits: `5171` is "wired and wireless
+telecommunications (except satellite)", so **wired carriers are included** even
+though the six-digit list names only wireless. At this depth the two cannot be
+separated.
 
 This is recorded because it is a deliberate choice and it differs from the
 upstream analysis this pipeline descends from, which used only the 19
