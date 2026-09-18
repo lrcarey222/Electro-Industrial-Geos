@@ -1177,10 +1177,56 @@ if (nrow(electrotech_fac) > 0) {
 workforce_share_update <- NULL
 workforce_growth_update <- NULL
 if (requireNamespace("blsQCEW", quietly = TRUE) && requireNamespace("tidycensus", quietly = TRUE)) {
+  # The electro-industrial NAICS bundle, broad definition (see
+  # docs/methodology.md). Manufacturing + utilities + telecommunications.
+  #
+  # The telecom block was remapped to NAICS 2022 on 2026-09-18. Previously it
+  # held codes from three superseded vintages, so nine of ten matched no series
+  # QCEW publishes and contributed nothing -- see docs/bls_qcew_options.md §7.
+  # Vintages confirmed against QCEW's own industry_titles.csv, which tags each
+  # code (NAICS = current, NAICS17/NAICS12/NAICS02 = superseded), and the
+  # successors against the Census 2022-to-2017 concordance.
+  #
+  #   was                            -> now       basis
+  #   517210 (NAICS12 wireless)         517112    via 2017 517312
+  #   517211 (NAICS02 paging)           517112    subsumed into wireless carriers
+  #   517212 (NAICS02 cellular)         517112    subsumed into wireless carriers
+  #   515210 (NAICS17 cable/subscr.)    516210    Census concordance
+  #   517910 (NAICS02 other telecom)    517810    via 2017 517919
+  #   517919 (NAICS17 all other)        517810    Census concordance
+  #   517410 (satellite)                517410    already current, unchanged
+  #
+  # NOT remapped, because they are not NAICS in any vintage QCEW recognises and
+  # the intent cannot be recovered without a human: 513322, 513340, 513390.
+  # NAICS 513 is Publishing (newspapers, periodicals, books, directories,
+  # software) and none of these three appears in QCEW's list at all. They are
+  # dropped rather than guessed at; if broadcasting was meant, the current codes
+  # are 516110 (radio) and 516120 (television).
+  #
+  # The manufacturing block carried superseded codes too, remapped in the same
+  # pass. Every one of these keeps its 4-digit parent, so the derived filter is
+  # unchanged -- this makes the stated definition current without altering what
+  # is measured:
+  #
+  #   335110, 335129 (NAICS17) -> 335139    parent 3351 either way
+  #   335121         (NAICS17) -> 335131    parent 3351
+  #   335122         (NAICS17) -> 335132    parent 3351
+  #   335911, 335912 (NAICS17) -> 335910    parent 3359 either way
+  #
+  # 221119 is retained as-is: QCEW tags it NAICS07, so it predates the
+  # 2017-to-2022 concordance and its successor cannot be established from it.
+  # Parent 2211 is current and is what the filter actually uses.
   electric_man_6d <- c(
-    "513322", "513340", "513390", "515210", "517210", "517211", "517212", "517410", "517910", "517919",
-    "334210", "334220", "334290", "335912", "221112", "221111", "221113", "221114", "221115", "221116", "221117", "221118", "221119", "221121",
-    "335110", "335121", "335122", "335129", "335311", "335312", "335313", "335314", "335921", "335929", "335931", "335932", "335991", "335999", "335911"
+    # Telecommunications and broadcasting (NAICS 2022)
+    "516210", "517112", "517410", "517810",
+    # Computer and electronic product manufacturing
+    "334210", "334220", "334290",
+    # Utilities: electric power generation
+    "221111", "221112", "221113", "221114", "221115", "221116", "221117", "221118", "221119", "221121",
+    # Electrical equipment, appliance and component manufacturing
+    "335131", "335132", "335139",
+    "335311", "335312", "335313", "335314",
+    "335910", "335921", "335929", "335931", "335932", "335991", "335999"
   )
   electric_man_4d <- unique(stringr::str_sub(electric_man_6d, 1, 4))
 
