@@ -723,21 +723,33 @@ sources:
       warn_after_days: 550
       fail_after_days: 730
     steward: lrcarey222
-    # BLOCKED, not merely unconfirmed. See notes: the publisher explicitly
-    # disclaims the use this index makes of the data. Do not write a connector
-    # for this source until that is resolved.
+    # Retained by decision of 2026-09-18: the use restriction below is known and
+    # the risk is accepted. Not blocked -- but do not remove the restriction from
+    # the notes, because anyone publishing or citing spot_score should be able to
+    # find it.
     can_commit_raw: false
     license: "TODO-CONFIRM -- underlying facts are stated to be public domain, but see the use restriction in notes"
     manual_instructions: >
-      Source identified 2026-09-16 as spotforcleanenergy.org. DO NOT REFRESH OR
-      AUTOMATE THIS SOURCE until the use restriction below is resolved by a
-      human. Retrieval steps are deliberately not recorded yet, because the
-      question is not how to get the data but whether this index may use it.
+      Source identified 2026-09-16 as spotforcleanenergy.org. The committed
+      artifact is "50 State Gap Analysis.xlsx", one worksheet per state of
+      Yes/No/Partial answers, averaged per state into spot_score.
+
+      To refresh: obtain a current export in the same shape -- one sheet per
+      state, question in column 1 and answer in column 2, answers being Yes / No
+      / Partial. The pipeline maps Yes to 1, No to 0, anything matching
+      "partial" or "some" to 0.5, and averages per state.
+
+      Read the use restriction in the notes before refreshing. It does not block
+      the refresh, but it constrains how the result may be presented.
     template: data/manual/spot_gap_analysis/TEMPLATE.csv
     column_contract:
       spot: [state, spot_score]
     notes: >
-      *** USE RESTRICTION CONFLICT -- NEEDS A HUMAN DECISION ***
+      *** USE RESTRICTION -- ACKNOWLEDGED AND ACCEPTED 2026-09-18 ***
+
+      Decision: spot_score stays in policy_intent as it is. The conflict below
+      is recorded rather than resolved, so it is visible to anyone who publishes
+      or cites this indicator.
 
       The SPOT landing page states, unprompted: "This website, and the data
       contained within it, should not be used to score or rank states.
@@ -755,11 +767,14 @@ sources:
       restriction is on the aggregation and ranking, which is precisely what the
       index does with it.
 
-      Options, none of which are mine to choose: seek written permission from
-      SPOT; replace spot_score with a differently-constructed indicator; or
-      remove it from policy_intent, which would change sub-index composition and
-      leave policy_intent with four variables. Until then this source is
-      identified but blocked.
+      Note that the aggregation predates this repository: the upstream
+      Policy.R computes spot_score identically, so this was inherited rather
+      than introduced here (see docs/legacy_parity.md section 3).
+
+      If the position is ever revisited, the options are: seek written
+      permission from SPOT; rebuild the indicator without cross-question
+      averaging; or drop it from policy_intent, which would change sub-index
+      composition and leave that sub-index with four variables.
 
       Also unresolved: the committed workbook is "50 State Gap Analysis.xlsx",
       one worksheet per state, which is not obviously a SPOT export. Whether it
