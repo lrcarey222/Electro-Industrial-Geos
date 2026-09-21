@@ -2,7 +2,7 @@
 
 # Data status
 
-As of **2026-09-16**. &#x1F7E2; fresh &middot; &#x1F7E1; past warn &middot; &#x1F534; past fail &middot; &#x26AA; no vintage recorded
+As of **2026-09-21**. &#x1F7E2; fresh &middot; &#x1F7E1; past warn &middot; &#x1F534; past fail &middot; &#x26AA; no vintage recorded
 
 **0 fresh**, 1 warning, 8 failing, 21 never recorded &mdash; across 30 sources feeding 33 indicators.
 
@@ -12,14 +12,14 @@ as fresh.
 
 | | Source | Vintage | Age | SLA (warn/fail) | Cadence | Steward | Indicators |
 |---|---|---|---|---|---|---|---|
-| &#x1F534; | `clean_investment_monitor`<br><sub>Clean Investment Monitor quarterly investment and facility data</sub> | 2025_Q2.20250811.0 | 401d | 150 / 240 | quarterly | jonekberg | 4 |
-| &#x1F534; | `bnef_datacenter_capacity`<br><sub>BloombergNEF Global Data Center Live IT Capacity Database</sub> | 2025-08-08 | 404d | 150 / 240 | quarterly | bsf-rmi | 2 |
-| &#x1F534; | `eia_861m_sales_revenue`<br><sub>EIA-861M retail sales and revenue by state and sector</sub> | 2025-M11 | 290d | 60 / 120 | monthly | jonekberg | 2 |
-| &#x1F534; | `afdc_ev_registrations`<br><sub>DOE AFDC EV registration counts by state</sub> | 2023-registrations | 740d | 400 / 550 | annual | jonekberg | 1 |
-| &#x1F534; | `afdc_station_counts`<br><sub>DOE AFDC historical alternative fuelling station counts</sub> | 2024 | 624d | 400 / 550 | annual | jonekberg | 1 |
-| &#x1F534; | `eig_dynamism`<br><sub>EIG Index of State Dynamism</sub> | 2022 | 1355d | 550 / 730 | irregular | jonekberg | 1 |
-| &#x1F534; | `lbnl_interconnection_queue`<br><sub>LBNL Queued Up interconnection queue data</sub> | thru2024_v2 | 624d | 400 / 550 | annual | jonekberg | 1 |
-| &#x1F534; | `census_county_population`<br><sub>Census county population estimates</sub> | co-est2023 | 916d | 400 / 550 | annual | jonekberg | &mdash; <sub>(support)</sub> |
+| &#x1F534; | `clean_investment_monitor`<br><sub>Clean Investment Monitor quarterly investment and facility data</sub> | 2025_Q2.20250811.0 | 406d | 150 / 240 | quarterly | jonekberg | 4 |
+| &#x1F534; | `bnef_datacenter_capacity`<br><sub>BloombergNEF Global Data Center Live IT Capacity Database</sub> | 2025-08-08 | 409d | 150 / 240 | quarterly | bsf-rmi | 2 |
+| &#x1F534; | `eia_861m_sales_revenue`<br><sub>EIA-861M retail sales and revenue by state and sector</sub> | 2025-M11 | 295d | 60 / 120 | monthly | jonekberg | 2 |
+| &#x1F534; | `afdc_ev_registrations`<br><sub>DOE AFDC EV registration counts by state</sub> | 2023-registrations | 745d | 400 / 550 | annual | jonekberg | 1 |
+| &#x1F534; | `afdc_station_counts`<br><sub>DOE AFDC historical alternative fuelling station counts</sub> | 2024 | 629d | 400 / 550 | annual | jonekberg | 1 |
+| &#x1F534; | `eig_dynamism`<br><sub>EIG Index of State Dynamism</sub> | 2022 | 1360d | 550 / 730 | irregular | jonekberg | 1 |
+| &#x1F534; | `lbnl_interconnection_queue`<br><sub>LBNL Queued Up interconnection queue data</sub> | thru2024_v2 | 629d | 400 / 550 | annual | jonekberg | 1 |
+| &#x1F534; | `census_county_population`<br><sub>Census county population estimates</sub> | co-est2023 | 921d | 400 / 550 | annual | jonekberg | &mdash; <sub>(support)</sub> |
 | &#x26AA; | `bls_qcew`<br><sub>BLS Quarterly Census of Employment and Wages, county level</sub> | &mdash; | unknown | 150 / 240 | quarterly | jonekberg | 2 |
 | &#x26AA; | `rmi_feasibility`<br><sub>RMI industry feasibility model output</sub> | &mdash; | unknown | 550 / 730 | irregular | jonekberg | 2 |
 | &#x26AA; | `sia_semiconductor_investment`<br><sub>SIA chip supply-chain investment announcements</sub> | &mdash; | unknown | 550 / 730 | irregular | jonekberg | 2 |
@@ -41,5 +41,5 @@ as fresh.
 | &#x26AA; | `drone_facility_announcements`<br><sub>US drone manufacturing facility announcements</sub> | 2022-2025 | unknown | 550 / 730 | irregular | jonekberg | &mdash; <sub>(support)</sub> |
 | &#x26AA; | `fcc_pea_county_crosswalk`<br><sub>FCC PEA-to-county crosswalk</sub> | FCC-PEA | unknown | 730 / 1095 | static | jonekberg | &mdash; <sub>(support)</sub> |
 | &#x26AA; | `fcc_pea_shapefile`<br><sub>FCC Partial Economic Area boundaries</sub> | FCC-PEA | unknown | 730 / 1095 | static | jonekberg | &mdash; <sub>(support)</sub> |
-| &#x1F7E1; | `eia_860m_generators`<br><sub>EIA-860M preliminary monthly generator inventory</sub> | 2026-M05 | 108d | 60 / 120 | monthly | jonekberg | 2 |
+| &#x1F7E1; | `eia_860m_generators`<br><sub>EIA-860M preliminary monthly generator inventory</sub> | 2026-M05 | 113d | 60 / 120 | monthly | jonekberg | 2 |
 
