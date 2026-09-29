@@ -278,11 +278,31 @@ issue_body <- function(source, row, as_of = Sys.Date()) {
 #' @param registry Result of `load_sources_registry()`.
 #' @param freshness Result of `compute_freshness()`.
 #' @param as_of Date the check ran.
+#' @param statuses Which statuses to notify on. Defaults to everything outside
+#'   its SLA. Narrowing this is how a first rollout avoids filing thirty issues
+#'   at once: `c("fail", "warn")` covers the sources that have a recorded
+#'   vintage and are late, leaving `pending` — which means no vintage was ever
+#'   recorded, a different kind of task — for a later wave.
 #' @return List of planned notifications.
 #' @export
-notification_plan <- function(registry, freshness, as_of = Sys.Date()) {
+notification_plan <- function(registry, freshness, as_of = Sys.Date(),
+                              statuses = c("fail", "warn", "pending")) {
+  # Not match.arg(several.ok = TRUE): that silently drops anything it does not
+  # recognise, so `--statuses fail,waring` would quietly file only failures and
+  # look like it had worked. Reject the whole thing instead.
+  valid <- c("fail", "warn", "pending", "ok")
+  unknown <- setdiff(statuses, valid)
+  if (length(unknown) > 0) {
+    rlang::abort(glue::glue(
+      "Unrecognised status(es): {paste(unknown, collapse = ', ')}. ",
+      "Valid values are {paste(valid, collapse = ', ')}."
+    ))
+  }
+  if (length(statuses) == 0) {
+    rlang::abort("`statuses` must name at least one status.")
+  }
   by_id <- setNames(registry$sources, vapply(registry$sources, function(s) s$id, character(1)))
-  flagged <- freshness[freshness$status %in% c("warn", "fail", "pending"), , drop = FALSE]
+  flagged <- freshness[freshness$status %in% statuses, , drop = FALSE]
 
   lapply(seq_len(nrow(flagged)), function(i) {
     row <- flagged[i, ]

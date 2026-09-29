@@ -14,8 +14,14 @@
 # Usage:
 #   Rscript scripts/04_plan_notifications.R [--as-of YYYY-MM-DD]
 #                                           [--out-dir <path>]
+#                                           [--statuses fail,warn,pending]
 #                                           [--allow-unassigned]
 #                                           [--dry-run]
+#
+# --statuses narrows which sources are notified on. `fail,warn` covers those
+# with a recorded vintage that are late. `pending` means no vintage was ever
+# recorded, which is a different task from refreshing one, and worth its own
+# wave rather than thirty issues landing in a single morning.
 #
 # Exit codes:
 #   0  nothing needs attention
@@ -70,10 +76,32 @@ if (length(problems) > 0) {
 
 manifest <- manifest_read(manifest_path(repo_root))
 freshness <- compute_freshness(registry, manifest, as_of = as_of)
-plan <- notification_plan(registry, freshness, as_of = as_of)
+statuses <- strsplit(arg_value("--statuses", "fail,warn,pending"), ",")[[1]]
+statuses <- trimws(statuses[nzchar(trimws(statuses))])
+plan <- notification_plan(registry, freshness, as_of = as_of, statuses = statuses)
+
+# Written before the early exit below, because "nothing needs attention" is
+# exactly the case where the workflow most needs the recovered list in order to
+# close the issues that are now resolved.
+write_recovered <- function() {
+  if (has_flag("--dry-run")) {
+    return(invisible(NULL))
+  }
+  fs::dir_create(out_dir, recurse = TRUE)
+  by_id <- setNames(registry$sources, vapply(registry$sources, function(s) s$id, character(1)))
+  ok_ids <- freshness$source_id[freshness$status == "ok"]
+  writeLines(
+    if (length(ok_ids)) vapply(ok_ids, function(id) issue_title(by_id[[id]]), character(1)) else character(0),
+    file.path(out_dir, "recovered.txt")
+  )
+}
+write_recovered()
 
 if (length(plan) == 0) {
-  cat("plan_notifications: every source is within its SLA; nothing to notify\n")
+  cat(sprintf(
+    "plan_notifications: nothing to notify for status(es) %s\n",
+    paste(statuses, collapse = ", ")
+  ))
   quit(status = 0)
 }
 
@@ -103,10 +131,16 @@ if (!has_flag("--dry-run")) {
   )
 }
 
+excluded <- sum(!freshness$status %in% c(statuses, "ok"))
 cat(sprintf(
-  "plan_notifications: %d source(s) need attention (as of %s)\n",
-  length(plan), as.character(as_of)
+  "plan_notifications: %d source(s) need attention (as of %s, statuses: %s)\n",
+  length(plan), as.character(as_of), paste(statuses, collapse = ", ")
 ))
+if (excluded > 0) {
+  cat(sprintf(
+    "  %d source(s) outside their SLA are excluded by the status filter\n", excluded
+  ))
+}
 for (p in plan) {
   cat(sprintf(
     "  [%-7s] %-32s overdue=%-5s escalate=%-4s assignee=%s\n",
