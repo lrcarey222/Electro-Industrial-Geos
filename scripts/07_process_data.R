@@ -760,11 +760,45 @@ if (!is.null(cnbc_raw)) {
 cnbc_rank <- ensure_optional_numeric(cnbc_rank, "cnbc_rank")
 
 # ---- Data Centers --------------------------------------------------------
-datacenter_path <- fs::path(raw_dir, "BNEF", "2025-08-08 - Global Data Center Live IT Capacity Database.xlsx")
-datacenter_raw <- read_optional_xlsx(datacenter_path, sheet = "Data Centers", start_row = 8)
+# Discover the newest export rather than naming one. The filename carries the
+# export date and, since 1.2.0, a version suffix, so a hard-coded name meant a
+# steward's newer drop was silently ignored -- see docs/refactor_plan.md F-08.
+datacenter_path <- latest_bnef_export(fs::path(raw_dir, "BNEF"))
+datacenter_raw <- if (is.na(datacenter_path)) {
+  NULL
+} else {
+  read_optional_xlsx(datacenter_path, sheet = "Data Centers", start_row = 8)
+}
 datacenter_index <- NULL
 datacenter_mw <- NULL
 if (!is.null(datacenter_raw)) {
+  message("BNEF export: ", basename(datacenter_path))
+
+  # `Date` is text in older exports and an Excel serial from 1.5.0. Normalise
+  # before comparing, then take the latest snapshot present instead of the
+  # hard-coded "2025-03-31", which a newer export does not contain at all and
+  # which therefore silently matched zero rows.
+  datacenter_raw$Date <- bnef_normalise_date(datacenter_raw$Date)
+  datacenter_snapshot <- max(datacenter_raw$Date, na.rm = TRUE)
+  message("BNEF snapshot: ", format(datacenter_snapshot))
+
+  # Forward-pipeline capacity: `Committed.Capacity.(MW)` up to the 2025-08-08
+  # export. BNEF removed it at 1.5.0 -- its COVER sheet says "Redundant columns
+  # 'Committed Capacity' and 'Early Stage Capacity' were removed" -- leaving
+  # `Under.Construction.Capacity.(MW)` as the only forward-looking field.
+  # Note `Other.Pipeline.Capacity.(MW)` is NOT that successor: it is the exact
+  # negation of under-construction capacity, and scaling it inverts the index.
+  pipeline_col <- bnef_pipeline_column(datacenter_raw)
+  if (is.na(pipeline_col)) {
+    rlang::abort(glue::glue(
+      "No usable forward-pipeline capacity column in {basename(datacenter_path)} ",
+      "-- neither 'Committed.Capacity.(MW)' nor ",
+      "'Under.Construction.Capacity.(MW)' is present and non-negative. BNEF's ",
+      "schema has changed again; refusing to guess which column carries ",
+      "pipeline capacity."
+    ))
+  }
+  message("BNEF pipeline column: ", pipeline_col)
   # Keep only rows with coordinates
   datacenter_points <- datacenter_raw %>%
     dplyr::filter(!is.na(Latitude), !is.na(Longitude)) %>%
@@ -781,7 +815,7 @@ if (!is.null(datacenter_raw)) {
   datacenter_fac <- datacenter_points %>%
     sf::st_join(states_sf, join = sf::st_within, left = TRUE) %>%
     sf::st_drop_geometry() %>%
-    dplyr::filter(Date == "2025-03-31") %>%
+    dplyr::filter(.data$Date == datacenter_snapshot) %>%
     dplyr::transmute(
       name = .data$Company,
       tech = paste(.data$`Facility.Category`, "Datacenter"),
@@ -797,20 +831,21 @@ if (!is.null(datacenter_raw)) {
   datacenter_states <- datacenter_points %>%
     sf::st_join(states_sf, join = sf::st_within, left = TRUE) %>%
     sf::st_drop_geometry() %>%
-    dplyr::filter(Date == "2025-03-31") %>%
+    dplyr::filter(.data$Date == datacenter_snapshot) %>%
     dplyr::group_by(STATE) %>%
     dplyr::summarize(
       headline_mw = sum(`Headline.Capacity.(MW)`, na.rm = TRUE),
-      construction_mw = sum(`Under.Construction.Capacity.(MW)`, na.rm = TRUE),
-      committed_mw = sum(`Committed.Capacity.(MW)`, na.rm = TRUE)
+      # No separate construction_mw: from 1.5.0 `pipeline_col` *is*
+      # Under.Construction, so carrying both would be the same number twice.
+      pipeline_mw = sum(.data[[pipeline_col]], na.rm = TRUE)
     ) %>%
     dplyr::left_join(states_gen, by = c("STATE" = "State")) %>%
     dplyr::mutate(datacenter_share = headline_mw / .data$nameplate_capacity_mw) %>%
-    dplyr::select(STATE, headline_mw, construction_mw, committed_mw, datacenter_share)
+    dplyr::select(STATE, headline_mw, pipeline_mw, datacenter_share)
 
   datacenter_index <- datacenter_states %>%
     dplyr::ungroup() %>%
-    dplyr::select(STATE, committed_mw, datacenter_share) %>%
+    dplyr::select(STATE, pipeline_mw, datacenter_share) %>%
     dplyr::mutate(dplyr::across(
       where(is.numeric),
       ~ (. - min(.[!is.infinite(.)], na.rm = TRUE)) /
