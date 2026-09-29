@@ -116,3 +116,103 @@ load_remote_eia_sales <- function(paths, raw_dir) {
   fs::file_copy(cached, eia_remote_path, overwrite = TRUE)
   readxl::read_excel(eia_remote_path, sheet = 1, skip = 2)
 }
+
+#' Most recent BloombergNEF data-centre export in a directory
+#'
+#' The filename carries the export date and, since 1.2.0, a version suffix --
+#' "2026-07-03 - Global Data Center Live IT Capacity Database (1.5.0).xlsx".
+#' Hard-coding one filename means a steward's newer drop is silently ignored,
+#' which is half of docs/refactor_plan.md F-08.
+#'
+#' @param dir Directory holding the exports.
+#' @return Path to the newest export, or NA if there is none.
+#' @export
+latest_bnef_export <- function(dir) {
+  if (!fs::dir_exists(dir)) {
+    return(NA_character_)
+  }
+  files <- fs::dir_ls(
+    dir,
+    regexp = "Global Data Center Live IT Capacity Database.*[.]xlsx$",
+    type = "file",
+    fail = FALSE
+  )
+  if (length(files) == 0) {
+    return(NA_character_)
+  }
+  stamps <- as.Date(stringr::str_extract(basename(files), "^[0-9]{4}-[0-9]{2}-[0-9]{2}"))
+  if (all(is.na(stamps))) {
+    # No dated filenames: fall back to mtime rather than picking arbitrarily.
+    return(as.character(files[which.max(fs::file_info(files)$modification_time)]))
+  }
+  as.character(files[which.max(stamps)])
+}
+
+#' Normalise a BNEF `Date` column
+#'
+#' Older exports carry text dates; 1.5.0 carries Excel serial numbers. Reading
+#' one format and filtering on the other yields zero rows without erroring,
+#' which is the other half of F-08.
+#'
+#' @param x The raw Date column.
+#' @return A Date vector.
+#' @export
+bnef_normalise_date <- function(x) {
+  if (inherits(x, "Date")) {
+    return(x)
+  }
+  if (inherits(x, "POSIXt")) {
+    return(as.Date(x))
+  }
+  if (is.numeric(x)) {
+    return(as.Date(x, origin = "1899-12-30"))
+  }
+  chr <- as.character(x)
+  out <- suppressWarnings(as.Date(chr))
+  num <- suppressWarnings(as.numeric(chr))
+  fill <- is.na(out) & !is.na(num)
+  if (any(fill)) {
+    out[fill] <- as.Date(num[fill], origin = "1899-12-30")
+  }
+  out
+}
+
+#' Resolve the forward-pipeline capacity column in a BNEF export
+#'
+#' Up to the 2025-08-08 export this was `Committed.Capacity.(MW)`. The 1.5.0
+#' COVER sheet records that BNEF dropped it: "Dataset now includes projects
+#' which are under construction but not yet online. Redundant columns
+#' 'Committed Capacity' and 'Early Stage Capacity' were removed."
+#' `Under.Construction.Capacity.(MW)` is the only forward-looking capacity
+#' field left, and it was present in the older vintages too.
+#'
+#' `Other.Pipeline.Capacity.(MW)` is deliberately *excluded*. In 1.5.0 it is
+#' the exact arithmetic negation of `Under.Construction.Capacity.(MW)` on all
+#' 388,484 rows (verified with both openxlsx and readxl), i.e. a mirror-bar
+#' chart helper rather than a data field. Min-max scaling it inverts
+#' `datacenter_index` -- Virginia lands at the bottom and Vermont at the top.
+#'
+#' `Committed.Capacity.(MW)` is preferred where it still exists so that older
+#' vintages keep reading exactly as before; this is a fallback, not a
+#' redefinition. Note the two are not the same concept, so a series spanning
+#' the 1.5.0 boundary is not continuous -- see docs/refactor_plan.md F-08.
+#'
+#' @param data A BNEF "Data Centers" sheet.
+#' @return The column name, or NA if no usable candidate is present.
+#' @export
+bnef_pipeline_column <- function(data) {
+  candidates <- c("Committed.Capacity.(MW)", "Under.Construction.Capacity.(MW)")
+  for (candidate in candidates) {
+    if (!candidate %in% names(data)) {
+      next
+    }
+    values <- suppressWarnings(as.numeric(data[[candidate]]))
+    if (any(values < 0, na.rm = TRUE)) {
+      # A capacity column holding negative values is a chart helper or a
+      # schema change, not capacity. Skip it rather than invert the index.
+      next
+    }
+    return(candidate)
+  }
+  NA_character_
+}

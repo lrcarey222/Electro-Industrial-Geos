@@ -25,7 +25,7 @@ Severity is about the published index, not about code tidiness.
 | [F-05](#f-05) | **high** | `industrial_electricity_price` is joined under the wrong column name, so the indicator keeps sample data | ✅ fixed (price half); workforce half still gated on `blsAPI` |
 | [F-06](#f-06) | **high** | `SQGDP.zip` is read but never downloaded; BEA filenames are hard-coded with years and fail silently | Phase 2 |
 | [F-07](#f-07) | medium | The AFDC station-count parser reads unnamed columns positionally | Phase 2 |
-| [F-08](#f-08) | medium | The BNEF snapshot date is hard-coded, so a refreshed file yields zero rows | Phase 3 |
+| [F-08](#f-08) | medium | The BNEF snapshot date is hard-coded, so a refreshed file yields zero rows | ✅ fixed, with a diff report; **`Other.Pipeline.(MW)` is a negated mirror column — see the note** |
 | [F-09](#f-09) | medium | One CIM directory holds two different release vintages, and the facility schema gate fails silently | Phase 1 / 2 |
 | [F-10](#f-10) | medium | `FCC_PEA_website.xlsx` is read but untracked and unregistered | ✅ fixed in step 0c |
 | [F-20](#f-20) | **high** | The manufacturing fallback joins on the wrong key type, so three cluster indicators silently keep sample data | ✅ fixed, with a diff report |
@@ -405,6 +405,62 @@ drops a newer BNEF export, the filter matches **zero rows**, `datacenter_index` 
 
 **Remedy.** Select the latest available `Date` and record it as the vintage label. Belongs with
 the Phase 3 manual lane, since BNEF is a licensed manual drop.
+
+**Fixed 2026-09-29.** Three defects, not one, all of which had to be fixed together before the
+1.5.0 export could be read at all:
+
+1. **Hard-coded filename.** `latest_bnef_export()` now discovers the newest dated export in
+   `data/raw/BNEF/`, falling back to mtime if no filename carries a date.
+2. **Hard-coded snapshot date.** `Date` is text in the older exports and an **Excel serial**
+   from 1.5.0, so the string comparison could never have matched even if the date were right.
+   `bnef_normalise_date()` handles both, and the pipeline now takes `max(Date)`.
+3. **A removed column with a poisoned lookalike.** BNEF dropped
+   `Committed.Capacity.(MW)` at 1.5.0. Its COVER sheet records why: *"Dataset now includes
+   projects which are under construction but not yet online. Redundant columns 'Committed
+   Capacity' and 'Early Stage Capacity' were removed."*
+
+On (3), the obvious-looking successor is a trap worth recording. `Other.Pipeline.Capacity.(MW)`
+appears where `Committed` used to sit and looks like a consolidation of `Committed` +
+`Early.Stage`. It is not. It is the **exact arithmetic negation** of
+`Under.Construction.Capacity.(MW)` — verified on all 388,484 rows, to machine precision, with
+both `openxlsx` and `readxl`, so it is a property of the workbook and not a parsing artefact.
+It is a mirror-bar chart helper; the workbook ships `ChartExamples` and `ChartTemplates` sheets.
+
+Feeding it into `scale_minmax` inverts `datacenter_index`: `cor(datacenter_mw,
+datacenter_index)` flips **+0.925 → −0.955**, Virginia (20,602 MW) becomes the *minimum* and
+Vermont (3.6 MW) the maximum, and Virginia falls from rank 4 to 37. This is exactly the class of
+silent corruption the diff guard exists to catch, and it was caught by the diff guard.
+
+`bnef_pipeline_column()` therefore:
+
+- prefers `Committed.Capacity.(MW)` where it still exists, so **older vintages read exactly as
+  before** — this is a fallback, not a redefinition;
+- falls back to `Under.Construction.Capacity.(MW)`, which was present in the older exports too;
+- **never** selects `Other.Pipeline.Capacity.(MW)`, and rejects *any* candidate carrying
+  negative values, so a future repeat of this shape fails loudly instead of inverting the index;
+- aborts rather than guessing if no usable column remains.
+
+**Effect on published numbers** (both sides from `git archive`, identical `data/raw`):
+
+| | before | after |
+|---|---|---|
+| export read | `2025-08-08 …` | `2026-07-03 … (1.5.0)` |
+| snapshot | 2025-03-31 (hard-coded) | 2026-03-31 (latest present) |
+| national `datacenter_mw` | 44,067 MW | 103,704 MW |
+| `cor(datacenter_mw, datacenter_index)` | +0.925 | **+0.955** |
+| top `datacenter_index` | Virginia | Virginia |
+
+Only `deployment_index` (max |Δ| 0.179, 48 states) and `cluster_index` (max |Δ| 0.065, 20
+states) move; the other four sub-indices are byte-identical. Headline index max |Δ| 0.055; 27 of
+50 states change rank, largest move 7 places (Texas 12 → 5, on `datacenter_mw` 4,771 → 15,676).
+
+**Two caveats for the record.** First, a series spanning the 1.5.0 boundary is **not
+continuous**: `Committed` and `Under.Construction` are different concepts, and the underlying
+population also widened (the vendor now includes not-yet-online projects). Re-baselining every
+vintage onto `Under.Construction` would make the series comparable at the cost of changing
+historical published numbers — a methodology call, deliberately not taken here. Second, the
+2025-08-08 export's own latest snapshot is **2025-06-30**, not the hard-coded 2025-03-31, so the
+pre-fix pipeline was already one quarter stale *within the file it was reading*.
 
 ---
 
