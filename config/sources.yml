@@ -30,21 +30,25 @@
 # in every freshness report. They are a Phase 5 cleanup decision.
 # ---------------------------------------------------------------------------
 
-# Staleness SLAs are set from `cadence` using these defaults. They are a
-# PROPOSAL, not a policy: an SLA says how long the index may go on quoting a
-# number before someone must answer for it, which is an editorial judgement.
+# Staleness SLAs are set from `cadence`. Agreed 2026-09-18, loosened from an
+# earlier stricter proposal that put every dated source straight into `fail`:
 #
-#   cadence      warn_after_days  fail_after_days
-#   monthly                   60              120
-#   quarterly                150              240
-#   annual                   400              550
-#   irregular                550              730
-#   static                   730             1095
+#   cadence      warn_after_days  fail_after_days   rationale
+#   monthly                  150              270   ~2 and ~4 release cycles late
+#   quarterly                270              450   ~2 and ~4 cycles late
+#   annual                   550              800   allows for a long release lag
+#   irregular                900             1300   no schedule to be late against
+#   static                  1095             1825   statutory or structural
 #
-# TODO-CONFIRM: these thresholds. Measured from `publisher_release_date`, most
-# sources are already past `warn` today -- EIA-861M ends 2025-11, the EIG
-# dynamism panel is 2022, AFDC registrations are 2023. That is the honest
-# reading of how stale the index is, but expect the first run to be mostly red.
+# An SLA says how long the index may go on quoting a number before someone has
+# to answer for it. That is an editorial judgement rather than a technical one,
+# so it lives here in the open instead of buried in code.
+#
+# Note what loosening does and does not fix. It changes the verdict for the nine
+# sources that have a recorded vintage. It changes nothing for the other
+# twenty-one, which read `pending` because no vintage has ever been recorded for
+# them -- and `pending` is a hole in the provenance chain, not a threshold
+# problem. The fix for those is recording a vintage, not moving a number.
 
 sources:
 
@@ -62,8 +66,8 @@ sources:
     typical_release_lag_days: 75
     refresh_cron: "0 9 5 * *"
     staleness:
-      warn_after_days: 60
-      fail_after_days: 120
+      warn_after_days: 150
+      fail_after_days: 270
     steward: jonekberg
     can_commit_raw: true
     license: "Public domain (US Government work)"
@@ -85,8 +89,8 @@ sources:
     typical_release_lag_days: 60
     refresh_cron: "0 9 5 * *"
     staleness:
-      warn_after_days: 60
-      fail_after_days: 120
+      warn_after_days: 150
+      fail_after_days: 270
     steward: jonekberg
     can_commit_raw: true
     license: "Public domain (US Government work)"
@@ -109,8 +113,8 @@ sources:
     typical_release_lag_days: 90
     refresh_cron: "0 9 1 1,4,7,10 *"
     staleness:
-      warn_after_days: 150
-      fail_after_days: 240
+      warn_after_days: 270
+      fail_after_days: 450
     steward: jonekberg
     can_commit_raw: true
     license: "Public domain (US Government work)"
@@ -132,8 +136,8 @@ sources:
     typical_release_lag_days: 275
     refresh_cron: "0 9 1 * *"
     staleness:
-      warn_after_days: 400
-      fail_after_days: 550
+      warn_after_days: 550
+      fail_after_days: 800
     steward: jonekberg
     can_commit_raw: true
     license: "Public domain (US Government work)"
@@ -153,8 +157,8 @@ sources:
     typical_release_lag_days: 150
     refresh_cron: "0 9 15 3,6,9,12 *"
     staleness:
-      warn_after_days: 150
-      fail_after_days: 240
+      warn_after_days: 270
+      fail_after_days: 450
     steward: jonekberg
     can_commit_raw: true
     license: "Public domain (US Government work)"
@@ -216,8 +220,8 @@ sources:
     typical_release_lag_days: null
     refresh_cron: "0 9 1 * *"
     staleness:
-      warn_after_days: 550
-      fail_after_days: 730
+      warn_after_days: 900
+      fail_after_days: 1300
     steward: jonekberg
     # TODO-CONFIRM: EIG is a non-profit, not a government body. Redistribution
     # terms for the downloadable workbook have not been checked.
@@ -240,8 +244,8 @@ sources:
     typical_release_lag_days: 240
     refresh_cron: "0 9 1 * *"
     staleness:
-      warn_after_days: 400
-      fail_after_days: 550
+      warn_after_days: 550
+      fail_after_days: 800
     steward: jonekberg
     can_commit_raw: true
     license: "TODO-CONFIRM: LBNL publications are generally freely available; terms not verified."
@@ -262,8 +266,8 @@ sources:
     typical_release_lag_days: 180
     refresh_cron: "0 9 1 * *"
     staleness:
-      warn_after_days: 400
-      fail_after_days: 550
+      warn_after_days: 550
+      fail_after_days: 800
     steward: jonekberg
     can_commit_raw: true
     license: "Public domain (US Government work)"
@@ -285,8 +289,8 @@ sources:
     typical_release_lag_days: 250
     refresh_cron: "0 9 1 * *"
     staleness:
-      warn_after_days: 400
-      fail_after_days: 550
+      warn_after_days: 550
+      fail_after_days: 800
     steward: jonekberg
     can_commit_raw: true
     license: "Public domain (US Government work)"
@@ -307,8 +311,8 @@ sources:
     typical_release_lag_days: 180
     refresh_cron: "0 9 1 * *"
     staleness:
-      warn_after_days: 400
-      fail_after_days: 550
+      warn_after_days: 550
+      fail_after_days: 800
     steward: jonekberg
     can_commit_raw: true
     license: "Public domain (US Government work)"
@@ -329,8 +333,8 @@ sources:
     typical_release_lag_days: 180
     refresh_cron: "0 9 1 * *"
     staleness:
-      warn_after_days: 400
-      fail_after_days: 550
+      warn_after_days: 550
+      fail_after_days: 800
     steward: jonekberg
     can_commit_raw: true
     license: "Public domain (US Government work)"
@@ -351,8 +355,8 @@ sources:
     typical_release_lag_days: null
     refresh_cron: null
     staleness:
-      warn_after_days: 730
-      fail_after_days: 1095
+      warn_after_days: 1095
+      fail_after_days: 1825
     steward: jonekberg
     can_commit_raw: true
     license: "Public domain (US Government work)"
@@ -373,8 +377,8 @@ sources:
     typical_release_lag_days: null
     refresh_cron: null
     staleness:
-      warn_after_days: 730
-      fail_after_days: 1095
+      warn_after_days: 1095
+      fail_after_days: 1825
     steward: jonekberg
     can_commit_raw: true
     license: "Public domain (US Government work)"
@@ -402,8 +406,8 @@ sources:
     typical_release_lag_days: 45
     refresh_cron: null
     staleness:
-      warn_after_days: 150
-      fail_after_days: 240
+      warn_after_days: 270
+      fail_after_days: 450
     steward: jonekberg
     # TODO-CONFIRM: no licence text ships with the CSVs and the repo is
     # MIT-licensed. Treated as non-redistributable until confirmed.
@@ -442,8 +446,8 @@ sources:
     typical_release_lag_days: 60
     refresh_cron: null
     staleness:
-      warn_after_days: 150
-      fail_after_days: 240
+      warn_after_days: 270
+      fail_after_days: 450
     steward: bsf-rmi
     can_commit_raw: false
     license: "Commercial subscription -- redistribution prohibited"
@@ -476,8 +480,8 @@ sources:
     typical_release_lag_days: null
     refresh_cron: null
     staleness:
-      warn_after_days: 550
-      fail_after_days: 730
+      warn_after_days: 900
+      fail_after_days: 1300
     steward: jonekberg
     can_commit_raw: false
     license: "TODO-CONFIRM -- treated as non-redistributable"
@@ -509,8 +513,8 @@ sources:
     typical_release_lag_days: null
     refresh_cron: null
     staleness:
-      warn_after_days: 550
-      fail_after_days: 730
+      warn_after_days: 900
+      fail_after_days: 1300
     steward: jonekberg
     can_commit_raw: false
     license: "TODO-CONFIRM -- treated as non-redistributable"
@@ -545,8 +549,8 @@ sources:
     typical_release_lag_days: null
     refresh_cron: null
     staleness:
-      warn_after_days: 550
-      fail_after_days: 730
+      warn_after_days: 900
+      fail_after_days: 1300
     steward: jonekberg
     can_commit_raw: false
     license: "TODO-CONFIRM"
@@ -576,8 +580,8 @@ sources:
     typical_release_lag_days: null
     refresh_cron: null
     staleness:
-      warn_after_days: 400
-      fail_after_days: 550
+      warn_after_days: 550
+      fail_after_days: 800
     steward: jonekberg
     can_commit_raw: false
     license: "Editorial content -- redistribution not permitted"
@@ -607,8 +611,8 @@ sources:
     typical_release_lag_days: null
     refresh_cron: null
     staleness:
-      warn_after_days: 550
-      fail_after_days: 730
+      warn_after_days: 900
+      fail_after_days: 1300
     steward: jonekberg
     can_commit_raw: false
     license: "RMI internal"
@@ -637,8 +641,8 @@ sources:
     typical_release_lag_days: null
     refresh_cron: null
     staleness:
-      warn_after_days: 550
-      fail_after_days: 730
+      warn_after_days: 900
+      fail_after_days: 1300
     steward: jonekberg
     can_commit_raw: false
     license: "TODO-CONFIRM -- NREL source data is public domain; the derived index is RMI internal"
@@ -666,8 +670,8 @@ sources:
     typical_release_lag_days: null
     refresh_cron: null
     staleness:
-      warn_after_days: 400
-      fail_after_days: 550
+      warn_after_days: 550
+      fail_after_days: 800
     steward: jonekberg
     can_commit_raw: false
     license: "RMI internal"
@@ -697,8 +701,8 @@ sources:
     typical_release_lag_days: null
     refresh_cron: null
     staleness:
-      warn_after_days: 730
-      fail_after_days: 1095
+      warn_after_days: 1095
+      fail_after_days: 1825
     steward: jonekberg
     can_commit_raw: true
     license: "RMI internal (compilation of public statute)"
@@ -729,8 +733,8 @@ sources:
     typical_release_lag_days: null
     refresh_cron: null
     staleness:
-      warn_after_days: 730
-      fail_after_days: 1095
+      warn_after_days: 1095
+      fail_after_days: 1825
     steward: jonekberg
     can_commit_raw: true
     license: "RMI internal (compilation of public statute)"
@@ -760,8 +764,8 @@ sources:
     typical_release_lag_days: null
     refresh_cron: null
     staleness:
-      warn_after_days: 550
-      fail_after_days: 730
+      warn_after_days: 900
+      fail_after_days: 1300
     steward: lrcarey222
     # Retained by decision of 2026-09-18: the use restriction below is known and
     # the risk is accepted. Not blocked -- but do not remove the restriction from
@@ -833,8 +837,8 @@ sources:
     typical_release_lag_days: 30
     refresh_cron: null
     staleness:
-      warn_after_days: 150
-      fail_after_days: 240
+      warn_after_days: 270
+      fail_after_days: 450
     steward: lrcarey222
     can_commit_raw: true
     license: "TODO-CONFIRM -- DSIRE terms of use not yet read"
@@ -868,8 +872,8 @@ sources:
     typical_release_lag_days: null
     refresh_cron: null
     staleness:
-      warn_after_days: 400
-      fail_after_days: 550
+      warn_after_days: 550
+      fail_after_days: 800
     steward: lrcarey222
     can_commit_raw: false
     license: "Commercial subscription -- redistribution not permitted"
@@ -916,8 +920,8 @@ sources:
     typical_release_lag_days: null
     refresh_cron: null
     staleness:
-      warn_after_days: 550
-      fail_after_days: 730
+      warn_after_days: 900
+      fail_after_days: 1300
     steward: lrcarey222
     can_commit_raw: true
     license: "TODO-CONFIRM -- OpenEI licences are per submission; read submission 5734's terms"
@@ -957,8 +961,8 @@ sources:
     typical_release_lag_days: null
     refresh_cron: null
     staleness:
-      warn_after_days: 550
-      fail_after_days: 730
+      warn_after_days: 900
+      fail_after_days: 1300
     steward: lrcarey222
     can_commit_raw: true
     license: "CC BY 4.0 -- attribution required (stated on the QuantGov bulk download page)"
@@ -999,8 +1003,8 @@ sources:
     typical_release_lag_days: null
     refresh_cron: null
     staleness:
-      warn_after_days: 550
-      fail_after_days: 730
+      warn_after_days: 900
+      fail_after_days: 1300
     steward: jonekberg
     can_commit_raw: true
     license: "RMI internal compilation"
