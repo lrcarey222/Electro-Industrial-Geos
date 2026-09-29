@@ -100,8 +100,8 @@ files — not what the filename or directory name claims. Where those disagree, 
 
 | indicator | sub_index | geography | publisher | evidence | access_class | cadence | current_vintage | automatable | confidence |
 |---|---|---|---|---|---|---|---|---|---|
-| `workforce_share` | cluster | state (county-rolled-up) | U.S. Bureau of Labor Statistics, QCEW | [`07_process_data.R:1137-1211`](../scripts/07_process_data.R#L1137) | `api` | quarterly | **computed then discarded — 3/50 values, all sample data** (see F-03) | **yes** — QCEW open API, no key; but ~3,100 calls per quarter needs rework | high |
-| `workforce_growth` | cluster | state (county-rolled-up) | U.S. Bureau of Labor Statistics, QCEW | [`07_process_data.R:1213-1227`](../scripts/07_process_data.R#L1213) | `api` | quarterly | **computed then discarded — 3/50 values, all sample data** (see F-03); baseline fixed at 2022-Q1 | **yes** — same as above | high |
+| `workforce_share` | cluster | state | U.S. Bureau of Labor Statistics, QCEW | [`R/connectors/qcew.R`](../R/connectors/qcew.R) | `api` | annual | **2025 annual, 50/50** (was 3/50 sample data until 2026-09-29); 15% of state-industry cells withheld, counted in `qcew_coverage.csv` | **yes — automated**, 10 requests, no key | high |
+| `workforce_growth` | cluster | state | U.S. Bureau of Labor Statistics, QCEW | [`R/connectors/qcew.R`](../R/connectors/qcew.R) | `api` | annual | **2025 annual vs 2022 baseline, 50/50** (was 3/50 sample data until 2026-09-29) | **yes — automated**, same slices as above | high |
 | `industry_feasibility` | cluster | state / PEA | **internal RMI analysis** (same `industry_feas_perc` as `feasibility_index`) | absent from `scripts/`; [`Legacy:1662`](../Legacy%20Script/Electro-Industrial_State.R#L1662) | `derived` → `manual` | **none — 3/50 values, all sample data** | no — internal model output | medium |
 | `clean_electric_capacity_growth` | cluster | state; PEA via point-in-polygon | U.S. Energy Information Administration, EIA-860M | state: [`07_process_data.R:724-725`](../scripts/07_process_data.R#L724); PEA: [`07_process_data.R:1502-1508`](../scripts/07_process_data.R#L1502) | `file_url` | monthly | as `electric_capacity_growth`; 42/50 populated | **yes** | high |
 | `industrial_electricity_price` | cluster | state | U.S. Energy Information Administration, EIA-861M | [`process_data_helpers.R:49-72`](../R/utils/process_data_helpers.R#L49); joined at [`07_process_data.R:1288`](../scripts/07_process_data.R#L1288) | `file_url` | monthly | **3/50 values, all sample data** — the real value is emitted under the wrong column name (see F-05) *and* reads the wrong sector (see F-04) | **yes** | high |
@@ -233,7 +233,7 @@ things stand. Counted `unknown` for automation purposes.
 | 2 | EIA-860M generator inventory | `electric_capacity_growth`, `clean_electric_capacity_growth` | predictable pattern `https://www.eia.gov/electricity/data/eia860m/xls/<month>_generator<year>.xlsx` ([`ingest_sources.R:42`](../R/utils/ingest_sources.R#L42)) | no |
 | 3 | BEA regional GDP (SAGDP + SQGDP) | `gdp_growth_index`, `incentives_gdp` denominator | `https://apps.bea.gov/regional/zip/SAGDP.zip`, and **SQGDP.zip by the same pattern — currently missing from the registry** | no |
 | 4 | EIG Index of State Dynamism | `economic_dynamism` | static asset URL ([`ingest_sources.R:66`](../R/utils/ingest_sources.R#L66)) | no |
-| 5 | BLS QCEW | `workforce_share`, `workforce_growth` | `blsAPI::blsQCEW()` open data ([`07_process_data.R:1153`](../scripts/07_process_data.R#L1153)) | no |
+| 5 | BLS QCEW | `workforce_share`, `workforce_growth` | state industry slices, keyless ([`R/connectors/qcew.R`](../R/connectors/qcew.R)) | ✅ **yes, 2026-09-29** |
 | 6 | LBNL interconnection queue | `interconnection_queue` | URL embeds release month + version; needs a discovery step | no |
 | 7 | DOE AFDC station counts + EV registrations | `ev_stations_cap`, `evs_per_capita` | URLs carry dated filenames and query tokens; needs a discovery step **and** a parser rewrite | no |
 
@@ -279,3 +279,9 @@ Non-`NA` counts per indicator in [`data/processed/inputs_processed.csv`](../data
 
 The file also carries a 36th column, `ind_price_m`, at 50/50 — an unintended output that holds the
 value `industrial_electricity_price` was supposed to receive. See F-05.
+
+**Since audited**, three of the eight 3/50 indicators have been fixed and now sit at 50/50:
+`industrial_electricity_price` (F-05, price half), and `workforce_share` + `workforce_growth`
+(the QCEW connector, 2026-09-29). The remaining five —`dsire_policy_count`, `employment_lq`,
+`feasibility_index`, `renewable_potential`, `industry_feasibility` — are all in §5.3, untraced to
+any producer in this repo. The table above is left as the original audit snapshot.

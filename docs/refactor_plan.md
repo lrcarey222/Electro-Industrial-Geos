@@ -22,7 +22,7 @@ Severity is about the published index, not about code tidiness.
 | [F-22](#f-22) | **high** | The refactor doubled the employment NAICS bundle; fixing F-05 would ship that silently | ✅ decided 2026-09-17: **broad** definition, documented in `methodology.md` |
 | [F-03](#f-03) | **high** | The test suite executes zero assertions; the one parity check compares against `NULL` | ✅ fixed in step 0b |
 | [F-04](#f-04) | **high** | EIA electricity price reads the **residential** column, not industrial — a regression against the committed vintage | ✅ fixed, with a diff report |
-| [F-05](#f-05) | **high** | `industrial_electricity_price` is joined under the wrong column name, so the indicator keeps sample data | ✅ fixed (price half); workforce half still gated on `blsAPI` |
+| [F-05](#f-05) | **high** | `industrial_electricity_price` is joined under the wrong column name, so the indicator keeps sample data | ✅ **fully fixed** — price half earlier; workforce half by the QCEW connector, 2026-09-29 |
 | [F-06](#f-06) | **high** | `SQGDP.zip` is read but never downloaded; BEA filenames are hard-coded with years and fail silently | Phase 2 |
 | [F-07](#f-07) | medium | The AFDC station-count parser reads unnamed columns positionally | Phase 2 |
 | [F-08](#f-08) | medium | The BNEF snapshot date is hard-coded, so a refreshed file yields zero rows | Phase 3 |
@@ -342,6 +342,18 @@ is claimed by exactly one source, would have caught all eight on the first run.
 **Remedy.** Rename to the contract column, restore the workforce coalesces, and add a
 post-merge assertion that no required indicator has fewer than *N* non-NA geographies. Separate PR
 from F-04; both move published numbers.
+
+**Fixed in two halves.** The price half landed earlier (rename to the contract column, coalesces
+restored). The workforce half landed 2026-09-29 with the QCEW connector, which is what finally gave
+`workforce_share` and `workforce_growth` something real to coalesce: both move **3/50 → 50/50**,
+and the three prior values were confirmed to be `sample_inputs.csv` verbatim. Only `cluster_index`
+moves (max |Δ| 0.447); headline max |Δ| 0.069, largest rank move 6 places. Full diff and the
+limitations in [`bls_qcew_options.md` §8](bls_qcew_options.md).
+
+That leaves **five** of the original eight sample-bleed indicators — `dsire_policy_count`,
+`employment_lq`, `feasibility_index`, `renewable_potential`, `industry_feasibility` — all of them
+in [`data_audit.md §5.3`](data_audit.md#53-indicators-i-could-not-trace-to-any-producer-in-this-repo),
+i.e. untraced to any producer in this repo. Verified against the post-connector run, not inferred.
 
 ---
 
