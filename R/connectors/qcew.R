@@ -256,10 +256,21 @@ qcew_state_rows <- function(slice, agglvl, own_code = QCEW_OWN_PRIVATE) {
 #' @return One row per state: `state`, `abbr`, `employment`, `n_disclosed`,
 #'   `n_suppressed`, `n_absent`.
 #' @export
-qcew_bundle_state_employment <- function(slices, lookup) {
+#' One row per state x NAICS code, absences made explicit
+#'
+#' The long intermediate behind [qcew_bundle_state_employment()], exported in
+#' its own right because [qcew_matched_growth()] needs to compare two periods
+#' cell by cell rather than on their totals.
+#'
+#' @param slices Named list of slices, names being the NAICS codes.
+#' @param lookup As returned by [qcew_state_lookup()].
+#' @return `state`, `abbr`, `code`, `employment` (NA if withheld or absent),
+#'   `suppressed`, `absent`.
+#' @export
+qcew_bundle_cells <- function(slices, lookup) {
   codes <- names(slices)
   if (is.null(codes) || any(!nzchar(codes))) {
-    rlang::abort("qcew_bundle_state_employment(): `slices` must be named by NAICS code.")
+    rlang::abort("qcew_bundle_cells(): `slices` must be named by NAICS code.")
   }
 
   cells <- purrr::imap_dfr(slices, function(slice, code) {
@@ -269,18 +280,34 @@ qcew_bundle_state_employment <- function(slices, lookup) {
 
   # Expand to every state x code pair so absences are explicit rather than
   # simply missing from the sum.
-  grid <- tidyr::expand_grid(area_fips = lookup$area_fips, code = codes)
-
-  grid %>%
+  tidyr::expand_grid(area_fips = lookup$area_fips, code = codes) %>%
     dplyr::left_join(
       cells %>% dplyr::select(dplyr::all_of(c("area_fips", "code", "employment", "suppressed"))),
       by = c("area_fips", "code")
     ) %>%
-    dplyr::mutate(absent = is.na(.data$suppressed)) %>%
-    dplyr::group_by(.data$area_fips) %>%
+    # `absent` must be derived before `suppressed` is filled: an unmatched row
+    # is what leaves `suppressed` NA. Filling it to FALSE afterwards makes
+    # disclosed / suppressed / absent mutually exclusive, so callers do not
+    # need `na.rm` to count them and cannot conflate "no row" with "withheld".
+    dplyr::mutate(
+      absent = is.na(.data$suppressed),
+      suppressed = !is.na(.data$suppressed) & .data$suppressed
+    ) %>%
+    dplyr::inner_join(lookup, by = "area_fips") %>%
+    dplyr::select(dplyr::all_of(c(
+      "state", "abbr", "code", "employment", "suppressed", "absent"
+    ))) %>%
+    dplyr::arrange(.data$state, .data$code)
+}
+
+#' @rdname qcew_bundle_cells
+#' @export
+qcew_bundle_state_employment <- function(slices, lookup) {
+  qcew_bundle_cells(slices, lookup) %>%
+    dplyr::group_by(.data$state, .data$abbr) %>%
     dplyr::summarize(
       n_disclosed = sum(!is.na(.data$employment)),
-      n_suppressed = sum(.data$suppressed, na.rm = TRUE),
+      n_suppressed = sum(.data$suppressed),
       n_absent = sum(.data$absent),
       employment = dplyr::if_else(
         sum(!is.na(.data$employment)) == 0L,
@@ -289,9 +316,68 @@ qcew_bundle_state_employment <- function(slices, lookup) {
       ),
       .groups = "drop"
     ) %>%
-    dplyr::inner_join(lookup, by = "area_fips") %>%
     dplyr::select(dplyr::all_of(c(
       "state", "abbr", "employment", "n_disclosed", "n_suppressed", "n_absent"
+    ))) %>%
+    dplyr::arrange(.data$state)
+}
+
+#' Growth in bundle employment on a like-for-like basket
+#'
+#' Comparing two periods' bundle *totals* silently compares different baskets,
+#' because QCEW's suppression is decided per period. Nevada is the worked
+#' example: NAICS 3359 reported 12,513 in 2022 and was withheld in 2025, so the
+#' naive comparison shows a 62% collapse while every other Nevada code is flat
+#' or rising. Measured over the 2022-2025 pair, 17 of 50 states change their
+#' disclosure pattern, and those states show 2.6x the spread of the 33 that do
+#' not -- so the naive figure partly measures disclosure rather than employment.
+#'
+#' This restricts each state to the codes disclosed in **both** periods and
+#' computes growth from those. `n_matched` and `n_dropped` record the size of
+#' the basket, so a growth rate resting on very few codes is visible rather than
+#' implied.
+#'
+#' Note this fixes comparability, not completeness: a matched basket still omits
+#' whatever was withheld in either period.
+#'
+#' @param current,baseline Cell tables from [qcew_bundle_cells()].
+#' @return `state`, `workforce_growth`, `matched_employment`,
+#'   `matched_employment_baseline`, `n_matched`, `n_dropped`.
+#' @export
+qcew_matched_growth <- function(current, baseline) {
+  dplyr::inner_join(
+    current %>% dplyr::select(dplyr::all_of(c("state", "code", "employment"))),
+    baseline %>% dplyr::select(dplyr::all_of(c("state", "code", "employment"))),
+    by = c("state", "code"), suffix = c("_cur", "_base")
+  ) %>%
+    dplyr::group_by(.data$state) %>%
+    dplyr::summarize(
+      n_matched = sum(!is.na(.data$employment_cur) & !is.na(.data$employment_base)),
+      n_dropped = sum(is.na(.data$employment_cur) | is.na(.data$employment_base)),
+      matched_employment = sum(
+        .data$employment_cur[!is.na(.data$employment_cur) & !is.na(.data$employment_base)]
+      ),
+      matched_employment_baseline = sum(
+        .data$employment_base[!is.na(.data$employment_cur) & !is.na(.data$employment_base)]
+      ),
+      .groups = "drop"
+    ) %>%
+    dplyr::mutate(
+      # Growth needs a positive base and at least one matched code.
+      workforce_growth = dplyr::if_else(
+        .data$n_matched > 0L & .data$matched_employment_baseline > 0,
+        (.data$matched_employment - .data$matched_employment_baseline) /
+          .data$matched_employment_baseline,
+        NA_real_
+      ),
+      matched_employment = dplyr::if_else(.data$n_matched > 0L, .data$matched_employment, NA_real_),
+      matched_employment_baseline = dplyr::if_else(
+        .data$n_matched > 0L, .data$matched_employment_baseline, NA_real_
+      )
+    ) %>%
+    dplyr::select(dplyr::all_of(c(
+      "state", "workforce_growth", "matched_employment",
+      "matched_employment_baseline", "n_matched", "n_dropped"
     ))) %>%
     dplyr::arrange(.data$state)
 }
@@ -312,24 +398,32 @@ qcew_state_totals <- function(slice, lookup) {
 
 #' Build `workforce_share` and `workforce_growth`
 #'
-#' The arithmetic is carried over verbatim from the upstream implementation,
-#' including `workforce_growth`'s denominator. Note that despite its name
-#' `workforce_growth` is **not** a growth rate: it is the change in bundle
-#' employment expressed as a share of *current total* employment, i.e. a
-#' percentage-point change in `workforce_share`'s numerator. That is a
-#' defensible quantity, but it is not what the name suggests. It is preserved
-#' rather than corrected because changing it would redefine a published
-#' indicator -- see docs/methodology.md.
+#' `workforce_share` is bundle employment as a percentage of total private
+#' employment.
+#'
+#' `workforce_growth` is the **proportional change in bundle employment over
+#' the baseline span**, computed on a like-for-like basket by
+#' [qcew_matched_growth()]. A value of `0.12` means the electro-industrial
+#' bundle grew 12% over the span.
+#'
+#' This corrects the upstream arithmetic, which divided the same numerator by
+#' *current total* employment. That produced a percentage-point change in
+#' `workforce_share`'s numerator rather than a growth rate -- a coherent
+#' quantity, but not the one the indicator is named for, and one whose
+#' magnitude was governed by the size of a state's whole private economy rather
+#' than by how fast its electro-industrial base was growing. Changed on
+#' 2026-09-29 at the index owner's explicit instruction; see
+#' docs/methodology.md and docs/refactor_plan.md F-23.
 #'
 #' @param bundle Current-period bundle employment, from
 #'   [qcew_bundle_state_employment()].
 #' @param totals Current-period totals, from [qcew_state_totals()].
-#' @param baseline Baseline-period bundle employment, or `NULL` to skip
-#'   `workforce_growth`.
+#' @param growth Matched growth from [qcew_matched_growth()], or `NULL` to leave
+#'   `workforce_growth` as `NA`.
 #' @return A tibble of `state`, `workforce_share`, `workforce_growth` and the
 #'   per-state coverage counts.
 #' @export
-qcew_workforce_indicators <- function(bundle, totals, baseline = NULL) {
+qcew_workforce_indicators <- function(bundle, totals, growth = NULL) {
   out <- bundle %>%
     dplyr::left_join(totals, by = "state") %>%
     dplyr::mutate(
@@ -340,20 +434,19 @@ qcew_workforce_indicators <- function(bundle, totals, baseline = NULL) {
       )
     )
 
-  if (is.null(baseline)) {
-    out$workforce_growth <- NA_real_
+  growth_cols <- c(
+    "workforce_growth", "matched_employment",
+    "matched_employment_baseline", "n_matched", "n_dropped"
+  )
+  if (is.null(growth)) {
+    for (col in growth_cols) {
+      out[[col]] <- if (col %in% c("n_matched", "n_dropped")) NA_integer_ else NA_real_
+    }
   } else {
     out <- out %>%
       dplyr::left_join(
-        baseline %>% dplyr::select(dplyr::all_of(c("state", "employment"))),
-        by = "state", suffix = c("", "_baseline")
-      ) %>%
-      dplyr::mutate(
-        workforce_growth = dplyr::if_else(
-          !is.na(.data$total_employment) & .data$total_employment > 0,
-          (.data$employment - .data$employment_baseline) / .data$total_employment,
-          NA_real_
-        )
+        growth %>% dplyr::select(dplyr::all_of(c("state", growth_cols))),
+        by = "state"
       )
   }
 
@@ -361,6 +454,8 @@ qcew_workforce_indicators <- function(bundle, totals, baseline = NULL) {
     dplyr::select(dplyr::all_of(c(
       "state", "workforce_share", "workforce_growth",
       "employment", "total_employment",
+      "matched_employment", "matched_employment_baseline",
+      "n_matched", "n_dropped",
       "n_disclosed", "n_suppressed", "n_absent"
     )))
 }
@@ -434,7 +529,9 @@ qcew_fetch_period <- function(codes4, year, qtr, cache_dir, lookup, refresh = FA
     ))
   }
 
+  cells <- qcew_bundle_cells(slices, lookup)
   list(
+    cells = cells,
     bundle = qcew_bundle_state_employment(slices, lookup),
     totals = qcew_state_totals(qcew_read_slice(total_path), lookup),
     absent_codes = absent

@@ -115,15 +115,36 @@ Both come from BLS QCEW state industry slices, annual averages, private
 ownership (`own_code 5`), via `R/connectors/qcew.R`:
 
     workforce_share  = bundle_employment / total_private_employment * 100
-    workforce_growth = (bundle_employment - bundle_employment_3yr_prior)
-                         / total_private_employment
+    workforce_growth = (matched_employment - matched_employment_3yr_prior)
+                         / matched_employment_3yr_prior
 
-**`workforce_growth` is not a growth rate**, despite the name. It is the change
-in bundle employment expressed as a share of *current total* employment — a
-percentage-point change in `workforce_share`'s numerator, which is why its
-values are small (−0.009 to 0.001 in the 2025 vintage). This is the upstream's
-arithmetic, preserved verbatim rather than corrected, because changing it would
-redefine a published indicator. Flagged here so nobody reads it as a rate.
+`workforce_growth` is a **proportional growth rate over the three-year span**:
+`0.12` means the electro-industrial bundle grew 12%. It is computed on a
+**matched basket** — only the NAICS codes disclosed in *both* periods — and
+`data/processed/qcew_coverage.csv` records how many codes each state's basket
+contains.
+
+The matched basket is not a refinement; without it the indicator is wrong.
+QCEW decides suppression per period, so comparing two periods' bundle totals
+compares two different baskets of industries. Nevada is the worked example:
+NAICS 3359 reported 12,513 in 2022 and was withheld in 2025, so a naive
+comparison shows employment collapsing 62% while every other Nevada code is
+flat or rising. On the matched basket Nevada is −0.3%. Across the 2022–2025
+pair, 17 of 50 states change their disclosure pattern, and those states showed
+2.6× the spread of the 33 that did not.
+
+This fixes comparability, not completeness: a matched basket still omits
+whatever was withheld in either period, and a state whose basket is small —
+the smallest is 2 of 9 codes — rests on correspondingly thin evidence. That is
+why the basket size is published alongside the rate.
+
+**Changed 2026-09-29.** The upstream divided the same numerator by *current
+total private employment*, making the value a percentage-point change in
+`workforce_share`'s numerator rather than a growth rate — so a state's reported
+"growth" depended on the size of its whole private economy. It also compared
+unmatched baskets, so the old values carried the same contamination, merely
+compressed into a range (−0.009 to 0.001) too narrow for it to be visible. See
+`refactor_plan.md` F-23.
 
 **Suppressed cells are `NA`, not zero.** QCEW reports a withheld cell's value as
 literal `0`, so treating it naively counts "withheld" as "none". Converting to

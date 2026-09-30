@@ -313,7 +313,11 @@ fixtures offline so the comparison is deterministic:
 | `workforce_share` coverage | **3 / 50** | **50 / 50** |
 | `workforce_growth` coverage | **3 / 50** | **50 / 50** |
 | `workforce_share` range | 0.20 – 0.25 | 0.56 – 1.86 |
-| `workforce_growth` range | 0.040 – 0.050 | −0.0090 – 0.0013 |
+| `workforce_growth` range | 0.040 – 0.050 | −0.108 – 0.135 |
+
+> `workforce_growth` was redefined as a true growth rate on a matched basket immediately after this
+> connector landed — see [`refactor_plan.md` F-23](refactor_plan.md#f-23). The figure above is the
+> corrected one.
 
 The three "before" values were confirmed to be `data/examples/sample_inputs.csv` verbatim — this is
 two of the eight indicators recorded at exactly 3/50 in [`data_audit.md` §5.4](data_audit.md) as
@@ -343,7 +347,20 @@ Two second-order effects are real, though neither fires in the 2025 vintage:
 * suppression is asserted to stay below 35% in the test suite, so a future vintage that broke the
   premise of the 4-digit/state choice would fail loudly.
 
-### 8.4 Still open
+### 8.4 Suppression also breaks comparison across periods
+
+Recorded here because it is a property of the source, not of the indicator that tripped over it.
+
+QCEW decides suppression **per period**. Any measure that compares two periods' totals therefore
+compares two different baskets of industries. Over the 2022–2025 pair, 17 of 50 states change
+their disclosure pattern; those states show 2.6× the growth spread of the 33 that do not, and the
+single worst case (Nevada, NAICS 3359 disclosed in 2022 and withheld in 2025) reports a 62%
+employment collapse that is entirely an artefact.
+
+Anything built on QCEW levels across time needs a matched basket. `qcew_matched_growth()` does
+this for `workforce_growth`; see [`refactor_plan.md` F-23](refactor_plan.md#f-23).
+
+### 8.5 Still open
 
 * `employment_lq` remains sample data under its own registry entry (`rmi_employment_lq`). The
   mechanism built here would supply it directly — see §5(3) — but it is a separate indicator.
