@@ -33,8 +33,8 @@ The full pipeline expects the following columns:
 | electric_capacity_growth | Clean electric capacity growth | EIA | Public |
 | semiconductor_investment | Semiconductor investment per GDP | SIA | Proprietary |
 | evs_per_capita | EV registrations per capita | AFDC | Public |
-| workforce_share | Electro-Industrial workforce share | BLS QCEW | Public |
-| workforce_growth | Electro-Industrial workforce growth | BLS QCEW | Public |
+| workforce_share | Electro-Industrial workforce share | BLS QCEW | Public (automated, `R/connectors/qcew.R`) |
+| workforce_growth | Electro-Industrial workforce growth | BLS QCEW | Public (automated, `R/connectors/qcew.R`) |
 | industry_feasibility | Industry feasibility | Internal model | Proprietary |
 | clean_electric_capacity_growth | Clean electric capacity growth | EIA | Public |
 | industrial_electricity_price | Industrial electricity price | EIA | Public |
@@ -51,6 +51,21 @@ A minimal synthetic dataset is included at `data/examples/sample_inputs.csv` (an
 ## Caching
 
 Downloaded public data should be cached under `data/raw_cache/` using `download_with_cache()`.
+`data/raw_cache/` is gitignored, so a cache miss must never be fatal: connectors that cannot reach
+their source degrade to leaving their indicators untouched and say so on stdout.
+
+## Reference data
+
+`data/reference/` holds small, stable lookup files that are committed because the pipeline needs
+them to run offline. Currently `qcew_area_titles.csv` — BLS's own statewide `area_fips` titles,
+which give the FIPS-to-state mapping from the publisher rather than a hard-coded list.
+
+## Connector outputs
+
+`data/processed/qcew_coverage.csv` records, per state, how many bundle cells BLS disclosed,
+withheld and did not publish. It exists because `workforce_share` understates by an unknown amount
+and the size of the gap should travel with the number — see
+[`docs/methodology.md`](../docs/methodology.md).
 
 ## Raw source staging
 

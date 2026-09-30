@@ -1203,15 +1203,20 @@ if (nrow(electrotech_fac) > 0) {
   )
 }
 
-# ---- County employment (legacy wiring, state-level rollup) --------------
-# NOTE: the `blsQCEW` namespace tested below does not exist as a package; the
-# QCEW client used inside this block is `blsAPI::blsQCEW()`. The guard is
-# therefore always FALSE and the block never runs. Restored here as-is to keep
-# this fix behaviour-preserving -- see docs/refactor_plan.md F-05 for the
-# separate change that makes these two indicators reach the index.
+# ---- Electro-industrial workforce, BLS QCEW ------------------------------
+# Replaces the county-by-county retrieval that never ran: its guard tested
+# `requireNamespace("blsQCEW")`, and no such package exists (the function lives
+# in `blsAPI`, archived from CRAN in 2021). Both indicators have therefore only
+# ever held sample data -- docs/refactor_plan.md F-05 and F-16.
+#
+# The replacement fetches one file per 4-digit NAICS code instead of one per
+# county per quarter: ~10 requests and ~1.5 MB against ~6,200 requests and
+# ~440 MB. Every measurement behind the design, and the three decisions it
+# encodes, are in docs/bls_qcew_options.md.
 workforce_share_update <- NULL
 workforce_growth_update <- NULL
-if (requireNamespace("blsQCEW", quietly = TRUE) && requireNamespace("tidycensus", quietly = TRUE)) {
+qcew_coverage <- NULL
+{
   # The electro-industrial NAICS bundle, broad definition (see
   # docs/methodology.md). Manufacturing + utilities + telecommunications.
   #
@@ -1263,92 +1268,113 @@ if (requireNamespace("blsQCEW", quietly = TRUE) && requireNamespace("tidycensus"
     "335311", "335312", "335313", "335314",
     "335910", "335921", "335929", "335931", "335932", "335991", "335999"
   )
-  electric_man_4d <- unique(stringr::str_sub(electric_man_6d, 1, 4))
+  # Read at 4-digit depth: state-level suppression across the bundle is 16%
+  # at 4-digit against 84% at county level (docs/bls_qcew_options.md).
+  electric_man_4d <- qcew_naics4(electric_man_6d)
 
-  county_codes <- tidycensus::fips_codes %>%
-    dplyr::transmute(
-      area_code = sprintf("%02d%03d", as.integer(.data$state_code), as.integer(.data$county_code)),
-      state_abbr = .data$state
-    ) %>%
-    dplyr::distinct()
+  # `offline` honours SKIP_DATA_DOWNLOADS, so a CI run with no network uses
+  # whatever is cached and otherwise leaves both indicators untouched rather
+  # than failing the pipeline.
+  qcew_offline <- isTRUE(as.logical(Sys.getenv("SKIP_DATA_DOWNLOADS", "FALSE")))
+  qcew_cache <- fs::path(paths$cache_dir, "qcew")
+  qcew_titles <- fs::path(
+    paths$data_dir %||% fs::path_dir(raw_dir), "reference", "qcew_area_titles.csv"
+  )
 
-  fetch_county_qtr <- function(area_code, y, q) {
-    tryCatch(
-      blsAPI::blsQCEW("Area",
-                      year    = as.character(y),
-                      quarter = as.character(q),
-                      area    = as.character(area_code)
-      ),
-      error = function(e) NULL
+  qcew_result <- tryCatch(
+    {
+      if (!fs::file_exists(qcew_titles)) {
+        rlang::abort(glue::glue("QCEW area titles are missing at {qcew_titles}."))
+      }
+      lookup <- qcew_state_lookup(qcew_read_area_titles(qcew_titles))
+
+      # Discovered, never pinned -- a hard-coded period is what F-08 turned out
+      # to be for BNEF.
+      latest_year <- qcew_latest_annual_year(qcew_cache, offline = qcew_offline)
+      if (is.na(latest_year)) {
+        rlang::abort("No published QCEW annual period could be reached.")
+      }
+      # Same three-year span the upstream used (it compared against 2022 Q1).
+      baseline_year <- as.character(as.integer(latest_year) - 3L)
+
+      current <- qcew_fetch_period(
+        electric_man_4d, latest_year, "a", qcew_cache, lookup,
+        offline = qcew_offline
+      )
+      baseline <- tryCatch(
+        qcew_fetch_period(
+          electric_man_4d, baseline_year, "a", qcew_cache, lookup,
+          offline = qcew_offline
+        )$bundle,
+        error = function(e) NULL
+      )
+
+      list(
+        year = latest_year,
+        baseline_year = baseline_year,
+        absent_codes = current$absent_codes,
+        indicators = qcew_workforce_indicators(current$bundle, current$totals, baseline)
+      )
+    },
+    error = function(e) {
+      # Both, deliberately. `message()` prints immediately, so an operator
+      # scanning the log sees it; R defers warnings into a "There were N
+      # warnings" tally at the end, which is too quiet for a source that has
+      # gone missing. The warning is kept so callers can still trap it.
+      msg <- paste0(
+        "QCEW workforce indicators unavailable: ", conditionMessage(e),
+        " -- workforce_share and workforce_growth keep their previous values."
+      )
+      message(msg)
+      rlang::warn(msg)
+      NULL
+    }
+  )
+
+  if (!is.null(qcew_result)) {
+    message(
+      "QCEW: ", qcew_result$year, " annual",
+      " (baseline ", qcew_result$baseline_year, "),",
+      " ", length(electric_man_4d), " bundle codes at 4-digit"
     )
-  }
-  
-
-  detect_latest_yq <- function(sample_area = "01001") {
-    candidates <- tidyr::expand_grid(year = 2025:2020, quarter = c("4", "3", "2", "1")) %>%
-      dplyr::arrange(dplyr::desc(.data$year), dplyr::desc(.data$quarter))
-
-    for (i in seq_len(nrow(candidates))) {
-      probe <- fetch_county_qtr(sample_area, candidates$year[i], candidates$quarter[i])
-      if (!is.null(probe) && nrow(probe) > 0) {
-        return(list(year = as.character(candidates$year[i]), quarter = as.character(candidates$quarter[i])))
-      }
+    if (length(qcew_result$absent_codes) > 0) {
+      # Not fatal, but it silently shrinks the bundle, so it must be visible.
+      rlang::warn(paste0(
+        "QCEW publishes no slice for: ",
+        paste(qcew_result$absent_codes, collapse = ", "),
+        ". These codes contribute nothing to workforce_share."
+      ))
     }
 
-    list(year = "2025", quarter = "3")
-  }
+    ind <- qcew_result$indicators
+    suppressed <- sum(ind$n_suppressed)
+    cells <- suppressed + sum(ind$n_disclosed)
+    message(sprintf(
+      "QCEW: %s of %s state-industry cells withheld (%.0f%%), treated as NA",
+      format(suppressed, big.mark = ","), format(cells, big.mark = ","),
+      100 * suppressed / cells
+    ))
 
-  pull_qtr <- function(y, q) {
-    purrr::map_dfr(county_codes$area_code, function(ac) {
-      Sys.sleep(0.03)
-      df <- fetch_county_qtr(ac, y, q)
-      if (is.null(df) || nrow(df) == 0) {
-        return(tibble::tibble())
-      }
-      df %>% dplyr::mutate(area_code = ac)
-    })
-  }
-
-  latest_yq <- detect_latest_yq("01001")
-  all_latest <- tryCatch(pull_qtr(latest_yq$year, latest_yq$quarter), error = function(e) tibble::tibble())
-  all_2022q1 <- tryCatch(pull_qtr("2022", "1"), error = function(e) tibble::tibble())
-
-  if (nrow(all_latest) > 0) {
-    county_elec_latest <- all_latest %>%
-      dplyr::filter(.data$own_code == 5, nchar(.data$industry_code) == 4, .data$industry_code %in% electric_man_4d) %>%
-      dplyr::mutate(latest_month_emplvl = dplyr::coalesce(.data$month3_emplvl, .data$month2_emplvl, .data$month1_emplvl)) %>%
-      dplyr::left_join(county_codes, by = "area_code") %>%
-      dplyr::group_by(.data$state_abbr) %>%
-      dplyr::summarize(elec_emp = sum(.data$latest_month_emplvl, na.rm = TRUE), .groups = "drop")
-
-    state_all_latest <- all_latest %>%
-      dplyr::filter(.data$own_code == 5, .data$industry_code == "10") %>%
-      dplyr::mutate(latest_month_emplvl = dplyr::coalesce(.data$month3_emplvl, .data$month2_emplvl, .data$month1_emplvl)) %>%
-      dplyr::left_join(county_codes, by = "area_code") %>%
-      dplyr::group_by(.data$state_abbr) %>%
-      dplyr::summarize(total_emp = sum(.data$latest_month_emplvl, na.rm = TRUE), .groups = "drop")
-
-    workforce_share_update <- county_elec_latest %>%
-      dplyr::left_join(state_all_latest, by = "state_abbr") %>%
-      dplyr::mutate(workforce_share = dplyr::if_else(.data$total_emp > 0, .data$elec_emp / .data$total_emp * 100, NA_real_)) %>%
-      dplyr::left_join(states, by = c("state_abbr" = "abbr")) %>%
-      dplyr::transmute(state = .data$state, workforce_share)
-
-    if (nrow(all_2022q1) > 0) {
-      county_elec_2022 <- all_2022q1 %>%
-        dplyr::filter(.data$own_code == 5, nchar(.data$industry_code) == 4, .data$industry_code %in% electric_man_4d) %>%
-        dplyr::mutate(latest_month_emplvl = dplyr::coalesce(.data$month3_emplvl, .data$month2_emplvl, .data$month1_emplvl)) %>%
-        dplyr::left_join(county_codes, by = "area_code") %>%
-        dplyr::group_by(.data$state_abbr) %>%
-        dplyr::summarize(elec_emp_2022 = sum(.data$latest_month_emplvl, na.rm = TRUE), .groups = "drop")
-
-      workforce_growth_update <- county_elec_latest %>%
-        dplyr::left_join(county_elec_2022, by = "state_abbr") %>%
-        dplyr::left_join(state_all_latest, by = "state_abbr") %>%
-        dplyr::mutate(workforce_growth = dplyr::if_else(.data$total_emp > 0, (.data$elec_emp - .data$elec_emp_2022) / .data$total_emp, NA_real_)) %>%
-        dplyr::left_join(states, by = c("state_abbr" = "abbr")) %>%
-        dplyr::transmute(state = .data$state, workforce_growth)
+    workforce_share_update <- ind %>%
+      dplyr::select(dplyr::all_of(c("state", "workforce_share")))
+    if (any(!is.na(ind$workforce_growth))) {
+      workforce_growth_update <- ind %>%
+        dplyr::select(dplyr::all_of(c("state", "workforce_growth")))
     }
+
+    # Coverage travels with the numbers: the bundle total understates by an
+    # unknown amount, and this is what records how much is unknown.
+    qcew_coverage <- ind %>%
+      dplyr::transmute(
+        state = .data$state,
+        qcew_year = qcew_result$year,
+        bundle_employment = .data$employment,
+        total_employment = .data$total_employment,
+        cells_disclosed = .data$n_disclosed,
+        cells_suppressed = .data$n_suppressed,
+        cells_absent = .data$n_absent
+      )
+    readr::write_csv(qcew_coverage, fs::path(paths$processed_dir, "qcew_coverage.csv"))
   }
 }
 workforce_share_update <- ensure_optional_numeric(workforce_share_update, "workforce_share")

@@ -97,10 +97,46 @@ manufacturing codes. See [`legacy_parity.md` §4](legacy_parity.md) for the
 comparison and `refactor_plan.md` F-22 for how the divergence was found. Anyone
 reading a workforce number should know which of the two definitions produced it.
 
-Note that the county-level pull truncates these to four digits
-(`electric_man_4d`), and a four-digit filter admits every six-digit child — so
-the effective bundle is broader still than the list above. That is a
-consequence of the implementation rather than a separate decision.
+Note that the retrieval truncates these to four digits (`electric_man_4d`), and
+a four-digit filter admits every six-digit child — so the effective bundle is
+broader still than the list above.
+
+Since 2026-09-29 that truncation is a **deliberate decision rather than an
+implementation accident**. QCEW withholds any cell that would disclose an
+individual employer, and suppression rises steeply as industry detail deepens:
+across the bundle, 16% of state cells are withheld at four-digit against 45–46%
+at six-digit. Four-digit trades precision of definition for completeness of
+data. The nine codes actually read are `2211`, `3342`, `3351`, `3353`, `3359`,
+`5162`, `5171`, `5174`, `5178`.
+
+### How the two workforce indicators are computed
+
+Both come from BLS QCEW state industry slices, annual averages, private
+ownership (`own_code 5`), via `R/connectors/qcew.R`:
+
+    workforce_share  = bundle_employment / total_private_employment * 100
+    workforce_growth = (bundle_employment - bundle_employment_3yr_prior)
+                         / total_private_employment
+
+**`workforce_growth` is not a growth rate**, despite the name. It is the change
+in bundle employment expressed as a share of *current total* employment — a
+percentage-point change in `workforce_share`'s numerator, which is why its
+values are small (−0.009 to 0.001 in the 2025 vintage). This is the upstream's
+arithmetic, preserved verbatim rather than corrected, because changing it would
+redefine a published indicator. Flagged here so nobody reads it as a rate.
+
+**Suppressed cells are `NA`, not zero.** QCEW reports a withheld cell's value as
+literal `0`, so treating it naively counts "withheld" as "none". Converting to
+`NA` does not recover the employment and does not change the bundle total — it
+makes the gap countable. 15% of state-industry cells were withheld in the 2025
+vintage, affecting 27 of 50 states; per-state counts are published alongside the
+numbers in `data/processed/qcew_coverage.csv`. **The bundle total understates
+electro-industrial employment by an unknown amount.**
+
+PEA-level values for both indicators are their state's value, broadcast by
+join. QCEW cannot support genuine PEA-level workforce figures: 181 of 410 PEAs
+would have no disclosed bundle employment at all. See
+[`bls_qcew_options.md` §6](bls_qcew_options.md).
 
 ### Cluster Index
 Inputs (higher is better unless noted):

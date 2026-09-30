@@ -146,66 +146,72 @@ sources:
       gjf_subsidy_tracker. Same hard-coded-vintage-filename problem as SQGDP.
 
   - id: bls_qcew
-    label: "BLS Quarterly Census of Employment and Wages, county level"
+    label: "BLS Quarterly Census of Employment and Wages, state industry slices"
     feeds: [workforce_share, workforce_growth]
     publisher: "U.S. Bureau of Labor Statistics"
     access_class: api
     endpoint: "https://data.bls.gov/cew/data/api/{year}/{quarter}/industry/{industry_code}.csv"
     auth_env: null
     geography: state
-    cadence: quarterly
-    typical_release_lag_days: 150
+    cadence: annual
+    typical_release_lag_days: 275
     refresh_cron: "0 9 15 3,6,9,12 *"
     staleness:
-      warn_after_days: 270
-      fail_after_days: 450
+      # 400/550, matching bea_sagdp -- the registry's other annual source with
+      # the same 275-day publication lag. The wave-1 values (270/450) were set
+      # while this source was still recorded as quarterly with a 150-day lag;
+      # against an annual file published 275 days after its period, a 270-day
+      # warn would fire the moment the data arrived.
+      warn_after_days: 400
+      fail_after_days: 550
     steward: jonekberg
     can_commit_raw: true
     license: "Public domain (US Government work)"
     notes: >
-      Open data, no key, no registration. Endpoint verified 2026-09-17; latest
-      available period is 2026 Q1. An industry slice carries every geography for
-      that NAICS code -- national, state, MSA and county -- so ~39 requests
-      totalling ~1.5 MB replace the current design's ~6,200 requests and ~440 MB
-      of county files.
+      CONNECTED 2026-09-29 -- R/connectors/qcew.R. Open data, no key, no
+      registration. An industry slice carries every geography for that NAICS
+      code, so 10 requests and ~1.5 MB replace the previous design's ~6,200
+      requests and ~440 MB of county files.
 
-      `geography` is recorded as `state`, not `county-rolled-up`, which is a
-      change from the existing implementation and the point of the redesign:
-      rolling up county data recovers only about 45% of the employment the same
-      industry reports at state level, because QCEW suppresses small cells and
-      suppression rises steeply as geography narrows.
+      Read at 4-digit depth across 9 codes (2211, 3342, 3351, 3353, 3359, 5162,
+      5171, 5174, 5178), the parents of the 31-code 6-digit bundle. All 9
+      resolve, including 5162/5171/5178, which exist only because the telecom
+      block was remapped to NAICS 2022 (F-22). Before that remap the bundle's
+      telecom third matched no published series at all.
 
-      CRITICAL: suppressed cells arrive as 0, not NA (disclosure_code == "N"),
-      and the current code sums with na.rm = TRUE -- so withheld reads as none.
-      For NAICS 334210 in 2024, 272 of 313 rows are suppressed and all 272
-      report 0 employment.
+      `cadence` is annual, not quarterly: the connector reads the annual
+      averages file (`{year}/a/`). Quarterly slices run one to two quarters
+      fresher and the endpoint supports them, but annual avoids seasonality in
+      an indicator that is a share, and the 275-day lag still comfortably beats
+      most of this index.
 
-      Two of the bundle's 6-digit codes, 335911 and 335912 (battery
-      manufacturing), return 404 at 6-digit detail, so a connector must tolerate
-      an absent slice rather than treating it as a failure.
+      Period is discovered, never pinned -- qcew_latest_annual_year() probes
+      newest-first. A hard-coded period is what F-08 turned out to be for BNEF.
 
-      Neither indicator has ever been computed from real data: the guard tests
-      requireNamespace("blsQCEW"), and no such package exists in this repo or the
-      upstream. blsAPI, which does provide blsQCEW(), was archived from CRAN in
-      2021 (F-16). Both indicators currently hold sample data only (F-05).
+      SUPPRESSION is the material limitation, and it is not fixed by fetching
+      differently. QCEW withholds any cell that would disclose an individual
+      employer, flags it disclosure_code == "N", and reports the value as
+      literal 0. The connector converts those to NA, which does NOT recover the
+      employment -- it makes the gap countable instead of silently summed as
+      zero. Measured 2025 annual: 65 of 441 state-industry cells withheld (15%),
+      27 of 50 states affected. Per-state counts are written to
+      data/processed/qcew_coverage.csv so the understatement travels with the
+      numbers.
 
-      Decisions taken 2026-09-17: suppressed cells are treated as NA, and the
-      bundle is read at 4-digit depth (19% state-level suppression across the
-      published bundle codes, against 84% at county level).
+      geography is `state` rather than county-rolled-up, and that is the point
+      of the redesign: rolling county data up recovers only ~45% of the
+      employment the same industry reports at state level, because suppression
+      rises steeply as geography narrows (84% at county, 16% at state).
 
-      OUTSTANDING: 9 of the bundle's 10 telecom/broadcasting codes return 404 in
-      QCEW, as do 4 of their 5 four-digit parents, so the broad bundle's telecom
-      third currently matches no published series. QCEW does publish 517111,
-      517112, 517121, 516 and 5161, so the industries exist under different
-      codes and the bundle appears to mix NAICS vintages. Remapping is a
-      methodology change and needs a human decision.
+      PEA-level workforce is not achievable from QCEW -- 181 of 410 PEAs would
+      have no disclosed bundle employment at all. PEAs inherit their state's
+      value by join, which is documented rather than fixed.
 
-      PEA-level workforce is not achievable from QCEW: 181 of 410 PEAs would
-      have no disclosed bundle employment at all and the median PEA is 94%
-      suppressed. PEAs currently inherit their state's value by join, so the
-      county roll-up can be dropped without loss.
+      A connector must tolerate an absent slice: 335911 and 335912 return 404 at
+      6-digit. qcew_fetch_slice() returns NA for these and the absence is
+      reported, not treated as a failure.
 
-      Full measurements, options and the outstanding decisions:
+      Full measurements and the decisions behind each choice:
       docs/bls_qcew_options.md
 
   - id: eig_dynamism

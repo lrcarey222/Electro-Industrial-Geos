@@ -1,7 +1,9 @@
 # Collecting BLS QCEW data: options and a recommendation
 
-**Status:** investigation findings. No code changes accompany this document.
-**Date:** 2026-09-17
+**Status:** ✅ **built 2026-09-29** as [`R/connectors/qcew.R`](../R/connectors/qcew.R). All three
+decisions in §5 were answered and are now encoded in the connector; §7's telecom remap landed
+first, in F-22. What was built, and what it did and did not fix, is recorded in §8.
+**Date:** 2026-09-17 (investigation); 2026-09-29 (connector)
 **Bears on:** `workforce_share`, `workforce_growth` (cluster sub-index), and
 `employment_lq` (economic capabilities) if it is restored.
 **Related:** [`refactor_plan.md` F-05](refactor_plan.md#f-05) (indicators discarded),
@@ -130,6 +132,10 @@ share and the LQ can both be computed from one mechanism.
 
 ## 5. What needs a decision before this is built
 
+> **Resolved 2026-09-17.** (1) suppressed is `NA`; (2) 4-digit depth; (3) `employment_lq` is out of
+> scope — it has its own registry entry (`rmi_employment_lq`) and its own steward, and restoring it
+> is separate work. The original framing is kept below because it records why each mattered.
+
 Three questions, none of which are mine to answer, because each changes what the indicator means.
 
 1. **Is suppressed `NA` or zero?** Recommendation: `NA`, with the state's share computed from what
@@ -236,6 +242,11 @@ rather than bolting it onto this connector.
 
 ## 7. Nine of the bundle's ten telecom codes do not exist in QCEW
 
+> **Resolved.** The telecom block was remapped to NAICS 2022 (F-22, merged 2026-09-18). All three
+> resulting 4-digit parents — `5162`, `5171`, `5178` — now return 200, verified 2026-09-29 against
+> the 2025 annual files, and together contribute 817,237 disclosed employees. The finding below
+> stands as the record of what was wrong.
+
 This affects the F-22 broad-bundle decision directly, and was found while testing which slices are
 retrievable.
 
@@ -272,3 +283,70 @@ NAICS 2022 equivalents — a methodology change that should be recorded, and whi
 indicator measures — or drop the telecom block and describe the bundle as manufacturing plus
 utilities. Silently shipping codes that match nothing would reproduce exactly the failure mode this
 whole exercise has been unpicking: an indicator that looks populated and is not.
+
+---
+
+## 8. What was built, 2026-09-29
+
+[`R/connectors/qcew.R`](../R/connectors/qcew.R), wired into `scripts/07_process_data.R` in place of
+the block that never ran.
+
+### 8.1 Retrieval
+
+| | before | after |
+|---|---|---|
+| requests per run | ~6,200 | **10** |
+| bytes per run | ~440 MB | **~1.5 MB** |
+| client | `blsQCEW` (does not exist) + `blsAPI` (archived) | plain HTTP + `readr` |
+| geography | county, rolled up to state | state rows read directly |
+| period | hard-coded probe | discovered newest-first |
+
+`tidycensus` left `Suggests:` with this change — the dead block was its only remaining user.
+
+### 8.2 Effect on published numbers
+
+Both sides from `git archive main`, identical `data/raw`, the after side reading the recorded
+fixtures offline so the comparison is deterministic:
+
+| | before | after |
+|---|---|---|
+| `workforce_share` coverage | **3 / 50** | **50 / 50** |
+| `workforce_growth` coverage | **3 / 50** | **50 / 50** |
+| `workforce_share` range | 0.20 – 0.25 | 0.56 – 1.86 |
+| `workforce_growth` range | 0.040 – 0.050 | −0.0090 – 0.0013 |
+
+The three "before" values were confirmed to be `data/examples/sample_inputs.csv` verbatim — this is
+two of the eight indicators recorded at exactly 3/50 in [`data_audit.md` §5.4](data_audit.md) as
+sample bleed. Both now carry real data for the first time.
+
+Only `cluster_index` moves (max |Δ| 0.447 across 48 states); the other five sub-indices are
+byte-identical, which is the correct blast radius since both indicators sit in the cluster
+sub-index. Headline index max |Δ| 0.069; 30 of 50 states change rank, largest move 6 places
+(Texas 21 → 15). **No weight, polarity or sub-index composition changed.**
+
+### 8.3 What this does *not* fix
+
+Worth stating plainly, because it would be easy to read the `NA` handling as a bigger win than it is.
+
+**Converting suppressed cells to `NA` does not recover the withheld employment, and does not change
+the bundle total.** Suppressed cells arrive as literal `0`, so summing them with `na.rm = TRUE`
+yields the same number either way — measured identically at 1,658,925 in both the correct and the
+naive implementation. What changes is that the gap becomes *countable*: 65 of 441 state-industry
+cells withheld (15%), affecting 27 of 50 states, written per-state to
+`data/processed/qcew_coverage.csv`. The bundle total still understates by an unknown amount. The
+connector's contribution is that the amount is no longer invisible.
+
+Two second-order effects are real, though neither fires in the 2025 vintage:
+
+* a state with **no** disclosed bundle cell now reports `NA` rather than `0`, which would otherwise
+  read as "no electro-industrial employment";
+* suppression is asserted to stay below 35% in the test suite, so a future vintage that broke the
+  premise of the 4-digit/state choice would fail loudly.
+
+### 8.4 Still open
+
+* `employment_lq` remains sample data under its own registry entry (`rmi_employment_lq`). The
+  mechanism built here would supply it directly — see §5(3) — but it is a separate indicator.
+* Quarterly slices would run one to two quarters fresher than the annual file. The endpoint
+  supports them; the connector takes `qtr` as a parameter and simply defaults to `"a"`.
+* PEA-level workforce remains a state broadcast, per §6.4 option (1).
