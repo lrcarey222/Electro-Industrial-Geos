@@ -22,6 +22,11 @@ on:
         description: "Evaluate staleness as of this date (YYYY-MM-DD). Blank = today."
         required: false
         type: string
+      statuses:
+        description: "Which statuses to file issues for (comma separated)."
+        required: false
+        type: string
+        default: "fail,warn"
       allow_unassigned:
         description: "File issues even for sources with no steward assigned"
         required: false
@@ -89,7 +94,14 @@ jobs:
         shell: bash
         run: |
           set +e
-          ARGS=""
+          # Staged rollout: the scheduled run files only for sources that have a
+          # recorded vintage and are late. `pending` means no vintage was ever
+          # recorded -- a different task, and 21 of them, so filing those on day
+          # one would bury the 8 that are actionable. Widen this to
+          # "fail,warn,pending" once vintages are being recorded at ingest.
+          STATUSES="${{ inputs.statuses }}"
+          if [ -z "$STATUSES" ]; then STATUSES="fail,warn"; fi
+          ARGS="--statuses $STATUSES"
           if [ -n "${{ inputs.as_of }}" ]; then ARGS="$ARGS --as-of ${{ inputs.as_of }}"; fi
           if [ "${{ inputs.allow_unassigned }}" = "true" ]; then ARGS="$ARGS --allow-unassigned"; fi
           Rscript scripts/04_plan_notifications.R $ARGS
@@ -228,17 +240,24 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Anything with an open data-refresh issue that is no longer in the
-          # plan is back inside its SLA. Close the loop automatically: if stale
-          # issues linger after a source recovers, people stop trusting them.
+          # Close only sources the freshness engine reports as `ok`, listed in
+          # recovered.txt. Deliberately NOT "absent from the plan": with a
+          # narrowed --statuses filter, everything the filter excluded is also
+          # absent from the plan, so that rule would close issues for sources
+          # that had merely been filtered out and report them as recovered when
+          # nothing had changed.
+          RECOVERED=outputs/metadata/notifications/recovered.txt
+          if [ ! -s "$RECOVERED" ]; then
+            echo "no sources are back within their SLA; nothing to close"
+            exit 0
+          fi
+
           gh issue list --label data-refresh --state open --limit 200 \
             --json number,title --jq '.[] | [.number, .title] | @tsv' > /tmp/still_open.tsv || true
 
-          [ -f /tmp/handled.txt ] || touch /tmp/handled.txt
-
           while IFS=$'\t' read -r num title; do
             [ -n "${num:-}" ] || continue
-            if ! grep -qxF "$title" /tmp/handled.txt; then
+            if grep -qxF "$title" "$RECOVERED"; then
               echo "::notice::closing #$num -- source is back within its SLA"
               gh issue comment "$num" --body \
                 "Back within its staleness SLA as of $(date -u +%Y-%m-%d). Closing automatically; this issue will reopen if the source goes stale again." >/dev/null

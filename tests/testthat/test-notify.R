@@ -176,3 +176,50 @@ test_that("recovery is detectable: the same source drops out of the plan once re
   # One row per source, so refreshing replaces rather than accumulating.
   expect_equal(nrow(refreshed), 1L)
 })
+
+# ---- staged rollout ------------------------------------------------------
+
+test_that("the status filter narrows which sources are notified", {
+  registry <- load_sources_registry(repo_root)
+  manifest <- manifest_read(manifest_path(repo_root))
+  f <- compute_freshness(registry, manifest, as_of = as.Date("2026-09-29"))
+
+  all_statuses <- notification_plan(registry, f, as_of = as.Date("2026-09-29"))
+  dated_only <- notification_plan(
+    registry, f,
+    as_of = as.Date("2026-09-29"), statuses = c("fail", "warn")
+  )
+
+  expect_lte(length(dated_only), length(all_statuses))
+
+  # Nothing pending may survive the narrowed filter.
+  narrowed_ids <- vapply(dated_only, function(p) p$source_id, character(1))
+  pending_ids <- f$source_id[f$status == "pending"]
+  expect_equal(intersect(narrowed_ids, pending_ids), character(0))
+
+  # And every narrowed entry really is fail or warn.
+  expect_true(all(vapply(dated_only, function(p) p$status, character(1)) %in% c("fail", "warn")))
+})
+
+test_that("an ok source is never notified, whatever the filter", {
+  registry <- list(sources = list(src()), path = "<memory>")
+  manifest <- manifest_upsert(manifest_empty(), list(
+    source_id = "src_a", publisher_release_date = "2026-01-01",
+    vintage_label = "v2", status = "ok"
+  ))
+  f <- compute_freshness(registry, manifest, as_of = as.Date("2026-02-01"))
+  expect_equal(f$status, "ok")
+
+  for (sts in list(c("fail", "warn"), c("fail", "warn", "pending"))) {
+    expect_length(notification_plan(registry, f, as_of = as.Date("2026-02-01"), statuses = sts), 0)
+  }
+})
+
+test_that("an unrecognised status is rejected rather than silently ignored", {
+  registry <- load_sources_registry(repo_root)
+  manifest <- manifest_read(manifest_path(repo_root))
+  f <- compute_freshness(registry, manifest, as_of = as.Date("2026-09-29"))
+  expect_error(
+    notification_plan(registry, f, as_of = as.Date("2026-09-29"), statuses = c("fail", "nonsense"))
+  )
+})
