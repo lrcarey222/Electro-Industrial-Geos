@@ -209,25 +209,123 @@ test_that("workforce_share is a plausible percentage and tracks the bundle", {
   expect_gt(cor(ind$workforce_share, ind$employment / ind$total_employment), 0.99)
 })
 
-test_that("workforce_growth uses the baseline period and the legacy arithmetic", {
+test_that("cells expand to every state x code pair, absences included", {
+  lookup <- state_lookup()
+  cells <- qcew_bundle_cells(load_bundle("2025"), lookup)
+
+  expect_equal(nrow(cells), 50L * length(bundle_codes))
+  expect_setequal(unique(cells$code), bundle_codes)
+  # Withheld and absent both carry NA employment, but are distinguishable, and
+  # the three states are mutually exclusive -- no NA sentinels to trip over.
+  expect_true(all(is.na(cells$employment[cells$suppressed])))
+  expect_true(all(is.na(cells$employment[cells$absent])))
+  expect_false(anyNA(cells$suppressed))
+  expect_false(anyNA(cells$absent))
+  expect_false(any(cells$suppressed & cells$absent))
+  expect_true(all(is.na(cells$employment) == (cells$suppressed | cells$absent)))
+
+  # The long form must agree with the aggregate it underpins.
+  agg <- qcew_bundle_state_employment(load_bundle("2025"), lookup)
+  expect_equal(sum(cells$employment, na.rm = TRUE), sum(agg$employment, na.rm = TRUE))
+})
+
+test_that("workforce_growth is a proportional growth rate on a matched basket", {
+  lookup <- state_lookup()
+  cur <- qcew_bundle_cells(load_bundle("2025"), lookup)
+  base <- qcew_bundle_cells(load_bundle("2022"), lookup)
+  growth <- qcew_matched_growth(cur, base)
+
+  expect_equal(nrow(growth), 50L)
+  expect_true(any(!is.na(growth$workforce_growth)))
+
+  # (matched_now - matched_baseline) / matched_baseline, recomputed here rather
+  # than restating the function's own arithmetic.
+  tx <- growth[growth$state == "Texas", ]
+  expect_equal(
+    tx$workforce_growth,
+    (tx$matched_employment - tx$matched_employment_baseline) /
+      tx$matched_employment_baseline
+  )
+
+  # Scale-free, so it lands in a human range rather than the near-zero band the
+  # old total-employment denominator forced everything into.
+  expect_gt(max(abs(growth$workforce_growth), na.rm = TRUE), 0.02)
+  # And still a plausible three-year movement, not an artefact.
+  expect_lt(max(abs(growth$workforce_growth), na.rm = TRUE), 1)
+})
+
+test_that("growth compares like with like when disclosure changes", {
+  # The defect this basket exists to prevent. Nevada's NAICS 3359 reported
+  # 12,513 in 2022 and was withheld in 2025, so comparing bundle totals shows a
+  # ~62% collapse while every other Nevada code is flat or rising.
+  lookup <- state_lookup()
+  cur <- qcew_bundle_cells(load_bundle("2025"), lookup)
+  base <- qcew_bundle_cells(load_bundle("2022"), lookup)
+
+  nv_3359_base <- base$employment[base$state == "Nevada" & base$code == "3359"]
+  nv_3359_cur <- cur$employment[cur$state == "Nevada" & cur$code == "3359"]
+  expect_false(is.na(nv_3359_base))
+  expect_true(is.na(nv_3359_cur))
+
+  growth <- qcew_matched_growth(cur, base)
+  nv <- growth[growth$state == "Nevada", ]
+
+  # The withheld code is excluded from both sides, not counted as a loss.
+  expect_true(nv$n_dropped >= 1)
+  expect_false(nv$matched_employment_baseline > nv_3359_base * 2)
+
+  naive <- {
+    a <- qcew_bundle_state_employment(load_bundle("2025"), lookup)
+    b <- qcew_bundle_state_employment(load_bundle("2022"), lookup)
+    (a$employment[a$state == "Nevada"] - b$employment[b$state == "Nevada"]) /
+      b$employment[b$state == "Nevada"]
+  }
+  expect_lt(naive, -0.5)
+  expect_gt(nv$workforce_growth, -0.2)
+
+  # Every state's basket must be accounted for.
+  expect_true(all(growth$n_matched + growth$n_dropped == length(bundle_codes)))
+})
+
+test_that("growth is NA without a positive matched base, never Inf", {
+  lookup <- state_lookup()
+  cur <- qcew_bundle_cells(load_bundle("2025"), lookup)
+  base <- qcew_bundle_cells(load_bundle("2022"), lookup)
+
+  # Blind one state entirely in the baseline: nothing can match.
+  base$employment[base$state == "Oregon"] <- NA_real_
+  # And zero another's matched base.
+  base$employment[base$state == "Nevada"] <- 0
+
+  growth <- qcew_matched_growth(cur, base)
+  expect_true(is.na(growth$workforce_growth[growth$state == "Oregon"]))
+  expect_equal(growth$n_matched[growth$state == "Oregon"], 0L)
+  expect_true(is.na(growth$workforce_growth[growth$state == "Nevada"]))
+  expect_false(any(is.infinite(growth$workforce_growth), na.rm = TRUE))
+  expect_false(is.na(growth$workforce_growth[growth$state == "Utah"]))
+})
+
+test_that("growth is independent of the size of the wider economy", {
+  # The other half of the correction: doubling a state's total private
+  # employment used to halve its reported "growth". It must now do nothing.
   lookup <- state_lookup()
   bundle <- qcew_bundle_state_employment(load_bundle("2025"), lookup)
   totals <- qcew_state_totals(qcew_read_slice(qcew_fixture("2025", "10")), lookup)
-  baseline <- qcew_bundle_state_employment(load_bundle("2022"), lookup)
-
-  ind <- qcew_workforce_indicators(bundle, totals, baseline)
-  expect_true(any(!is.na(ind$workforce_growth)))
-
-  # Verbatim legacy formula: change in bundle employment over *current total*
-  # employment -- a percentage-point change, not a growth rate.
-  tx <- ind[ind$state == "Texas", ]
-  tx_base <- baseline$employment[baseline$state == "Texas"]
-  expect_equal(
-    tx$workforce_growth,
-    (tx$employment - tx_base) / tx$total_employment
+  growth <- qcew_matched_growth(
+    qcew_bundle_cells(load_bundle("2025"), lookup),
+    qcew_bundle_cells(load_bundle("2022"), lookup)
   )
 
-  # Without a baseline the indicator is NA rather than silently zero.
+  base_ind <- qcew_workforce_indicators(bundle, totals, growth)
+  doubled <- totals
+  doubled$total_employment <- doubled$total_employment * 2
+  doubled_ind <- qcew_workforce_indicators(bundle, doubled, growth)
+
+  expect_equal(base_ind$workforce_growth, doubled_ind$workforce_growth)
+  # The share, which legitimately depends on it, must halve.
+  expect_equal(base_ind$workforce_share / 2, doubled_ind$workforce_share)
+
+  # Without growth the indicator is NA rather than silently zero.
   expect_true(all(is.na(qcew_workforce_indicators(bundle, totals)$workforce_growth)))
 })
 

@@ -1305,15 +1305,21 @@ qcew_coverage <- NULL
         qcew_fetch_period(
           electric_man_4d, baseline_year, "a", qcew_cache, lookup,
           offline = qcew_offline
-        )$bundle,
+        )$cells,
         error = function(e) NULL
       )
+      # Growth is computed on the codes disclosed in BOTH periods. Comparing
+      # the two periods' totals would partly measure QCEW's disclosure
+      # decisions rather than employment -- see qcew_matched_growth().
+      growth <- if (is.null(baseline)) NULL else {
+        qcew_matched_growth(current$cells, baseline)
+      }
 
       list(
         year = latest_year,
         baseline_year = baseline_year,
         absent_codes = current$absent_codes,
-        indicators = qcew_workforce_indicators(current$bundle, current$totals, baseline)
+        indicators = qcew_workforce_indicators(current$bundle, current$totals, growth)
       )
     },
     error = function(e) {
@@ -1368,11 +1374,19 @@ qcew_coverage <- NULL
       dplyr::transmute(
         state = .data$state,
         qcew_year = qcew_result$year,
+        baseline_year = qcew_result$baseline_year,
         bundle_employment = .data$employment,
         total_employment = .data$total_employment,
         cells_disclosed = .data$n_disclosed,
         cells_suppressed = .data$n_suppressed,
-        cells_absent = .data$n_absent
+        cells_absent = .data$n_absent,
+        # The levels workforce_growth was actually computed from: the codes
+        # disclosed in both periods, not the full bundle. Published so a growth
+        # rate resting on a thin basket is visible rather than implied.
+        growth_basket_now = .data$matched_employment,
+        growth_basket_baseline = .data$matched_employment_baseline,
+        growth_codes_matched = .data$n_matched,
+        growth_codes_dropped = .data$n_dropped
       )
     readr::write_csv(qcew_coverage, fs::path(paths$processed_dir, "qcew_coverage.csv"))
   }

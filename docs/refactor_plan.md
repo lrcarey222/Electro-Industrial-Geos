@@ -39,6 +39,7 @@ Severity is about the published index, not about code tidiness.
 | [F-17](#f-17) | **blocker** | `DESCRIPTION` is not a readable control file, so CI has never installed *any* dependency | ✅ fixed in step 0a |
 | [F-18](#f-18) | medium | `Package:` is not a legal R package name, so the package can never be installed | needs your decision |
 | [F-19](#f-19) | **blocker** | `renv.lock` is structurally invalid, so `renv::restore()` aborts | ✅ unblocked in step 0b; real pinning deferred |
+| [F-23](#f-23) | **high** | `workforce_growth` was not a growth rate, and compared two different baskets of industries | ✅ fixed 2026-09-29, with a diff report |
 
 ---
 
@@ -1087,6 +1088,83 @@ it diverges from the upstream's 19-code manufacturing-only bundle and that the f
 widens it further.
 
 This unblocked F-05.
+
+---
+
+<a id="f-23"></a>
+### F-23 — `workforce_growth` was not a growth rate, and compared different baskets *(high)*
+
+Two defects in one indicator, both inherited from the upstream, both invisible until the QCEW
+connector gave the indicator real data to compute from.
+
+**1. It was not a growth rate.** The formula divided the change in bundle employment by *current
+total private employment*:
+
+```r
+workforce_growth = (elec_emp - elec_emp_2022) / total_emp
+```
+
+That is a percentage-point change in `workforce_share`'s numerator — a coherent quantity, but not
+the one the indicator is named for. Its practical effect is that a state's reported "growth"
+scaled inversely with the size of its whole private economy: the same bundle expansion registered
+as a smaller number in California than in Vermont, purely because California's denominator is
+larger.
+
+**2. It compared two different baskets of industries.** This is the more serious one. QCEW decides
+suppression *per period*, so a code disclosed in the baseline year and withheld in the current
+year leaves the comparison measuring a disclosure decision rather than employment.
+
+Nevada is the worked example. NAICS 3359 reported **12,513 in 2022 and was withheld in 2025**,
+while every other Nevada code was flat or rising:
+
+| | 2022 | 2025 |
+|---|---|---|
+| 3359 | 12,513 | **withheld** |
+| 2211 | 2,653 | 3,071 |
+| 5171 | 3,848 | 3,285 |
+| (six others) | flat | flat |
+
+The naive comparison of bundle totals reports Nevada's electro-industrial employment collapsing
+**62%**. On a like-for-like basket it is **−0.3%** (7,838 → 7,818).
+
+This was not confined to Nevada. Over the 2022–2025 pair, **17 of 50 states change their disclosure
+pattern**, and those states show 2.6× the spread of the 33 that do not:
+
+| | states | growth range | sd |
+|---|---|---|---|
+| disclosure stable | 33 | −0.108 … +0.135 | 0.062 |
+| disclosure changed | 17 | **−0.616** … +0.139 | **0.161** |
+
+**Fixed 2026-09-29**, at the index owner's explicit instruction to make the indicator a growth
+rate. `qcew_matched_growth()` restricts each state to the codes disclosed in *both* periods:
+
+```r
+workforce_growth = (matched_now - matched_baseline) / matched_baseline
+```
+
+Worth being precise about what the second fix does and does not do. It repairs **comparability**,
+not **completeness** — a matched basket still omits whatever was withheld in either period, and a
+state whose basket is thin rests on correspondingly thin evidence. The smallest basket is 2 of 9
+codes; 22 states use all nine. `n_matched` and `n_dropped` are published per state in
+`data/processed/qcew_coverage.csv` so a rate resting on two codes is visible rather than implied.
+
+**Effect.** `workforce_share` is untouched. `workforce_growth` moves from a
+−0.009…+0.001 band to −0.108…+0.135, and the extreme values disappear because they were artefacts:
+
+| | before | after (matched) |
+|---|---|---|
+| range | −0.00899 … +0.00132 | −0.1083 … +0.1348 |
+| Nevada | (−0.616 unmatched) | **−0.0026** |
+| states with `NA` | 0 | 0 |
+
+Only `cluster_index` moves (max |Δ| 0.144 across 48 states); the other five sub-indices are
+byte-identical. Headline max |Δ| 0.022; 30 of 50 states change rank, largest move 3 places
+(Idaho 10 → 7, Texas 15 → 12, Maryland 5 → 8). No weight, polarity or sub-index composition
+changed.
+
+**Note the old values carried defect (2) identically** — same numerator — but the
+total-employment denominator compressed everything into a band too narrow for it to be visible.
+Making the indicator a growth rate did not introduce the contamination; it exposed it.
 
 ---
 
