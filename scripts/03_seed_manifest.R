@@ -172,9 +172,14 @@ entries <- list(
        release = NA, vintage = "2022-2025",
        notes = "Announcement dates span 2022-2025; hand-compiled from press sources."),
 
-  # No artefact exists for these: no producer in the repo at all.
+  # Owned by a connector: R/connectors/qcew.R records its own vintage on every
+  # run. Re-seeding must not overwrite that with a `pending` row -- see the
+  # carry-forward below.
   list(id = "bls_qcew", path = NA, reader = NULL, release = NA, vintage = NA,
-       notes = "Pulled live from the BLS API, nothing staged. Results are currently discarded before reaching the index (F-05)."),
+       connector_owned = TRUE,
+       notes = "Retrieved by R/connectors/qcew.R, which records its own vintage. Nothing staged locally; slices are cached under data/raw_cache/qcew/."),
+
+  # No artefact exists for these: no producer in the repo at all.
   list(id = "rmi_feasibility", path = NA, reader = NULL, release = NA, vintage = NA,
        notes = "No producer in this repository; internal analysis output. Indicators hold sample data only."),
   list(id = "nrel_supply_curve", path = NA, reader = NULL, release = NA, vintage = NA,
@@ -207,7 +212,24 @@ if (length(setdiff(seeded_ids, registry_ids)) > 0) {
 manifest <- manifest_empty()
 now <- format(as.POSIXct(Sys.time(), tz = "UTC"), "%Y-%m-%dT%H:%M:%SZ")
 
+# Seeding rebuilds the manifest from scratch, which would silently downgrade any
+# source a connector has since recorded a real vintage for. Read what is already
+# there so those rows can be carried forward untouched.
+existing <- tryCatch(manifest_read(manifest_path(repo_root)), error = function(e) manifest_empty())
+carried <- character(0)
+
 for (e in entries) {
+  if (isTRUE(e$connector_owned)) {
+    prior <- existing[existing$source_id == e$id, , drop = FALSE]
+    # Only carry forward a row that actually evidences a vintage; a stale
+    # `pending` row is no better than reseeding it.
+    if (nrow(prior) == 1L && !is.na(prior$publisher_release_date[1])) {
+      manifest <- dplyr::bind_rows(manifest, prior)
+      carried <- c(carried, e$id)
+      next
+    }
+  }
+
   present <- !is.na(e$path) && fs::file_exists(e$path)
   data <- NULL
   if (present && !is.null(e$reader)) {
@@ -257,3 +279,9 @@ cat(sprintf(
   sum(!is.na(manifest$sha256)),
   sum(!is.na(manifest$n_rows))
 ))
+if (length(carried) > 0) {
+  cat(sprintf(
+    "  %d connector-owned row(s) carried forward unchanged: %s\n",
+    length(carried), paste(carried, collapse = ", ")
+  ))
+}

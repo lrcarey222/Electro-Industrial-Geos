@@ -360,7 +360,44 @@ employment collapse that is entirely an artefact.
 Anything built on QCEW levels across time needs a matched basket. `qcew_matched_growth()` does
 this for `workforce_growth`; see [`refactor_plan.md` F-23](refactor_plan.md#f-23).
 
-### 8.5 Still open
+### 8.5 The vintage is recorded, so freshness can see it
+
+A connector that fetches data but records nothing leaves the source `pending` in the freshness
+engine forever — an automated source that nobody is ever told has gone stale. That is the exact
+failure the accountability spine exists to prevent, so the connector writes its own manifest entry
+on every successful run:
+
+```
+bls_qcew,2026-09-30T14:12:53Z,2025-12-31,2025 annual,106496ec…,450,50,a624ec24…,api,R/connectors/qcew.R,ok
+```
+
+`bls_qcew` moved from `pending` to **`ok`**, and the SLA now has something to measure:
+
+| | |
+|---|---|
+| vintage | `2025 annual`, period end 2025-12-31 |
+| age | 273 days (as of 2026-09-30) |
+| SLA | warn @ 400, fail @ 550 |
+| headroom | 127 days |
+
+`publisher_release_date` holds the **period end**, not a publication date: QCEW's open-data CSVs
+carry no publication date, and this matches what the rest of the registry already does
+(`eia_861m_sales_revenue` records `2025-11-30` for vintage `2025-M11`).
+
+That 273-day age is also why the staleness SLA is 400/550 rather than the 270/450 set in the
+first notification wave. **The newest published annual file is already 273 days old on arrival**,
+so a 270-day warn threshold would fire the moment the data landed, every year. 400/550 matches
+`bea_sagdp`, the registry's other annual source with the same 275-day publication lag.
+
+`sha256` digests the set of slice files actually read, so the entry pins the precise inputs behind
+a published number rather than only the period label. (It is a file digest, and therefore subject
+to [F-24](refactor_plan.md#f-24).)
+
+One trap worth knowing about: `03_seed_manifest.R` rebuilds the manifest from scratch, so it would
+have reset this row to `pending` on its next run. Sources marked `connector_owned` are now carried
+forward unchanged, and the script reports how many it carried.
+
+### 8.6 Still open
 
 * `employment_lq` remains sample data under its own registry entry (`rmi_employment_lq`). The
   mechanism built here would supply it directly — see §5(3) — but it is a separate indicator.

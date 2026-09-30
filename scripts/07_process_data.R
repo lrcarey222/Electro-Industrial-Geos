@@ -1319,6 +1319,7 @@ qcew_coverage <- NULL
         year = latest_year,
         baseline_year = baseline_year,
         absent_codes = current$absent_codes,
+        manifest_entry = qcew_manifest_entry(current, latest_year, "a"),
         indicators = qcew_workforce_indicators(current$bundle, current$totals, growth)
       )
     },
@@ -1389,6 +1390,31 @@ qcew_coverage <- NULL
         growth_codes_dropped = .data$n_dropped
       )
     readr::write_csv(qcew_coverage, fs::path(paths$processed_dir, "qcew_coverage.csv"))
+
+    # Record the vintage. Without this the freshness engine reports bls_qcew as
+    # `pending` forever -- an automated source nobody is told has gone stale,
+    # which is the failure mode the whole accountability spine exists to stop.
+    qcew_manifest_written <- tryCatch(
+      {
+        mpath <- manifest_path(repo_root)
+        manifest_write(
+          manifest_upsert(manifest_read(mpath), qcew_result$manifest_entry),
+          mpath
+        )
+        TRUE
+      },
+      error = function(e) {
+        message("QCEW: could not record the manifest entry: ", conditionMessage(e))
+        rlang::warn(paste0("QCEW manifest entry not recorded: ", conditionMessage(e)))
+        FALSE
+      }
+    )
+    if (isTRUE(qcew_manifest_written)) {
+      message(
+        "QCEW: manifest updated -- vintage ", qcew_result$manifest_entry$vintage_label,
+        ", period end ", qcew_result$manifest_entry$publisher_release_date
+      )
+    }
   }
 }
 workforce_share_update <- ensure_optional_numeric(workforce_share_update, "workforce_share")

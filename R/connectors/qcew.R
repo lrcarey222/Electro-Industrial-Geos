@@ -534,6 +534,90 @@ qcew_fetch_period <- function(codes4, year, qtr, cache_dir, lookup, refresh = FA
     cells = cells,
     bundle = qcew_bundle_state_employment(slices, lookup),
     totals = qcew_state_totals(qcew_read_slice(total_path), lookup),
-    absent_codes = absent
+    absent_codes = absent,
+    slice_paths = c(present, stats::setNames(total_path, QCEW_ALL_INDUSTRIES)),
+    first_slice = slices[[1]]
+  )
+}
+
+#' Period end of a QCEW annual vintage
+#'
+#' QCEW's open-data CSVs carry no publication date, so there is nothing to read
+#' for a true release date. The manifest's `publisher_release_date` therefore
+#' records the **period end** -- the last day the data covers -- which is what
+#' the rest of the registry already does (`eia_861m_sales_revenue` records
+#' `2025-11-30` for vintage `2025-M11`). The staleness SLA in
+#' `config/sources.yml` is calibrated against this, not against a release date.
+#'
+#' @param year Four-digit year.
+#' @param qtr Quarter `"1"`..`"4"`, or `"a"` for annual.
+#' @return A `Date`.
+#' @export
+qcew_period_end <- function(year, qtr = "a") {
+  year <- as.integer(year)
+  if (identical(as.character(qtr), "a")) {
+    return(as.Date(sprintf("%d-12-31", year)))
+  }
+  q <- suppressWarnings(as.integer(qtr))
+  if (is.na(q) || !q %in% 1:4) {
+    rlang::abort("qcew_period_end(): `qtr` must be 1-4 or \"a\".")
+  }
+  month_day <- c("03-31", "06-30", "09-30", "12-31")[q]
+  as.Date(sprintf("%d-%s", year, month_day))
+}
+
+#' Manifest entry for a completed QCEW fetch
+#'
+#' Without this the freshness engine reports `bls_qcew` as `pending` forever --
+#' an automated source with no recorded vintage, which is exactly the silent rot
+#' the accountability spine exists to prevent.
+#'
+#' `sha256` digests the set of slice files actually read, so the entry pins the
+#' precise inputs behind a published number rather than just the period label.
+#'
+#' @param period A list from [qcew_fetch_period()].
+#' @param year,qtr The period fetched.
+#' @param ingested_by Label for the producer.
+#' @return A named list suitable for [manifest_upsert()].
+#' @export
+qcew_manifest_entry <- function(period, year, qtr = "a",
+                                ingested_by = "R/connectors/qcew.R") {
+  digests <- sort(vapply(period$slice_paths, file_sha256, character(1)))
+  combined <- if (all(is.na(digests))) {
+    NA_character_
+  } else {
+    digest::digest(paste(digests[!is.na(digests)], collapse = "|"), algo = "sha256")
+  }
+
+  absent_note <- if (length(period$absent_codes) > 0) {
+    paste0(
+      " QCEW publishes no slice for ",
+      paste(period$absent_codes, collapse = ", "), "."
+    )
+  } else {
+    ""
+  }
+  suppressed <- sum(period$bundle$n_suppressed)
+  cells <- suppressed + sum(period$bundle$n_disclosed)
+
+  list(
+    source_id = "bls_qcew",
+    retrieved_at_utc = format(as.POSIXct(Sys.time(), tz = "UTC"), "%Y-%m-%dT%H:%M:%SZ"),
+    publisher_release_date = as.character(qcew_period_end(year, qtr)),
+    vintage_label = paste(year, if (identical(as.character(qtr), "a")) "annual" else paste0("Q", qtr)),
+    sha256 = combined,
+    n_rows = nrow(period$cells),
+    n_geographies = count_geographies(period$bundle),
+    schema_fingerprint = schema_fingerprint(period$first_slice),
+    ingest_method = "api",
+    ingested_by = ingested_by,
+    status = "ok",
+    notes = paste0(
+      "State industry slices, 4-digit, private ownership. ",
+      suppressed, " of ", cells, " state-industry cells withheld and read as NA; ",
+      "per-state counts in data/processed/qcew_coverage.csv. ",
+      "publisher_release_date is the period end -- QCEW's open-data files carry ",
+      "no publication date.", absent_note
+    )
   )
 }
