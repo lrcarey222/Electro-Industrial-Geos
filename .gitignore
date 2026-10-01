@@ -28,9 +28,21 @@ data/raw/BNEF/
 # Good Jobs First Subsidy Tracker -- redistribution not permitted
 data/raw/Good Jobs First/
 
+# CNBC America's Top States for Business -- editorial content, redistribution
+# not permitted. Untracked 2026-10-01; cnbc_rank falls back to base_inputs on a
+# clean clone. Steward instructions and a template are in config/sources.yml.
+data/raw/cnbc_bus_rankings.csv
+
+# C2ER State Business Incentives Database -- commercial subscription,
+# redistribution not permitted. Untracked 2026-10-01; dev_policy_count falls
+# back to base_inputs on a clean clone.
+data/raw/dbo_Program.csv
+
 # Belt and braces: catch these payloads wherever they are dropped
 **/*Global Data Center Live IT Capacity Database*
 gjf_complete.csv
+dbo_Program.csv
+cnbc_bus_rankings.csv
 
 # Manual drop payloads for licensed sources. Templates and READMEs under
 # data/manual/ stay tracked; the data files do not.

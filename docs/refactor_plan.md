@@ -32,7 +32,8 @@ Severity is about the published index, not about code tidiness.
 | [F-21](#f-21) | **high** | A PEA spanning a state border emits duplicate `economic_area` rows, which makes naive PEA diffs misleading | needs your decision — raised from medium, see F-11 |
 | [F-11](#f-11) | medium | Live network reads sit at script top level, breaking the no-network CI rule | ✅ fixed 2026-09-30, with a diff report; both sources were also 2 vintages stale |
 | [F-12](#f-12) | **high** | 19 of 21 staged EIA-860M workbooks are byte-identical HTML error pages; three are committed | Phase 2 |
-| [F-13](#f-13) | **governance** | Licensed third-party raw data is committed to a public MIT-licensed repository | needs your decision |
+| [F-13](#f-13) | **governance** | Licensed third-party raw data is committed to a public MIT-licensed repository | BNEF, GJF, CNBC and C2ER untracked; 8 sources held pending [F-25](#f-25) |
+| [F-25](#f-25) | **high** | A licensed source supplies the population and GDP denominators for public-domain indicators | found 2026-10-01; blocks the rest of F-13 |
 | [F-14](#f-14) | high | No per-indicator vintage metadata exists anywhere | Phase 1 (the core gap) |
 | [F-15](#f-15) | medium | DC is excluded from all state outputs; the brief assumes 50 states + DC | needs your decision |
 | [F-16](#f-16) | **blocker** | Four packages the pipeline loads are declared nowhere, so CI cannot install them | ✅ fixed in step 0a |
@@ -740,10 +741,34 @@ have not read them.
    [F-13a](#f-13a) for the plan, the consequences, and what a force-push does *not* achieve on its
    own.
 
-**Still open under rule 1:** `climate_leg.csv` (licensed legislative tracker, publisher now
-confirmed as needing verification) and `dbo_Program.csv` (C2ER State Business Incentives Database —
-a subscription product). Both are still tracked. By the stated rule they should also come out; they
-were not named explicitly in the decision, so they are flagged rather than removed.
+**Decision 4 (2026-10-01): the two files whose terms are explicit are out.**
+
+`cnbc_bus_rankings.csv` (CNBC — *"Editorial content, redistribution not permitted"*) and
+`dbo_Program.csv` (C2ER State Business Incentives Database — *"Commercial subscription,
+redistribution not permitted"*) are untracked as of this change, with `.gitignore` excluding both
+their paths and their bare filenames.
+
+Both already carried `can_commit_raw: false`, `manual_instructions` and a template in
+`sources.yml`. **They were committed in direct contradiction of the registry that governs them** —
+which is the clearest possible argument for the enforcement check below, and for why the registry
+has to be the authority rather than a description.
+
+**Cost, measured.** On a *clean clone* (local copies are unaffected, so this changes nothing for a
+steward who holds the files):
+
+| indicator | before | after |
+|---|---|---|
+| `cnbc_rank` | 50/50 | **3/50 — sample data** |
+| `dev_policy_count` | 50/50 | **3/50 — sample data** |
+
+Headline index max \|Δ\| 0.082, 38 of 50 states change rank, largest move 10 places.
+
+**Still open under rule 1 — and bigger than it looks.** Eight more sources carry an unconfirmed
+licence and are still tracked. Taking all of them out costs **15 of 33 indicators**, which is
+recorded in [F-25](#f-25) because the reason is not licensing at all: the Clean Investment Monitor
+files supply *population and GDP denominators* for indicators whose own sources are public domain.
+Removing one licensed file breaks four public indicators. That needs fixing before those files come
+out, not after.
 
 **Enforcement.** CI now fails if any tracked file is excluded by `.gitignore`
 (`git ls-files -i -c --exclude-standard`), which is what a `git add -f` of a licensed payload looks
@@ -1255,6 +1280,54 @@ content*, which changes what the field means.
 
 Not bundled into the QCEW manifest work: it touches every staged source's recorded hash, so it
 deserves its own PR and its own diff.
+
+---
+
+<a id="f-25"></a>
+### F-25 — A licensed source supplies the denominators for public indicators *(high — blocks F-13)*
+
+Found while measuring the cost of decision 4 (take licensed raw data out of the public repo).
+
+Removing all ten unconfirmed-licence sources drops **15 of 33 indicators to 3-state sample data**
+and moves 48 of 50 ranks, by as much as 38 places. But the licences are not what causes most of
+that. **The Clean Investment Monitor files alone account for seven of the fifteen**, because
+`socioeconomics.csv` supplies state *population and real GDP* — the denominators for indicators
+whose own sources are public domain:
+
+| indicator | its own source | why CIM breaks it |
+|---|---|---|
+| `ev_stations_cap` | DOE AFDC — **public domain** | ÷ CIM population |
+| `evs_per_capita` | DOE AFDC — **public domain** | ÷ CIM population |
+| `semiconductor_investment` | SIA | ÷ CIM real GDP |
+| `clean_tech_investment` | CIM itself | — |
+| `battery_manufacturing`, `solar_manufacturing`, `ev_manufacturing` | CIM facility metadata | — |
+
+Measured, removing only the three CIM files: 7 indicators to sample data, headline max \|Δ\| 0.178,
+46 of 50 ranks moved, largest 27 places.
+
+So two public-domain indicators are unpublishable because of a licence on a file used only as a
+divisor. That is an avoidable coupling, not an inherent one.
+
+**Remedy — and it is now cheap.** Both denominators have public replacements already in the repo:
+
+* **Population** — `census_county_population` was connected on 2026-09-30 and already supplies
+  county population, which rolls up to state. Public domain.
+* **Real GDP** — `bea_sagdp` is already a registered source with `SAGDP.zip` staged. Public domain.
+
+Swapping the denominators would remove the licensed dependency *and* improve provenance, since
+Census and BEA are the authoritative sources for population and GDP respectively. It changes the
+numbers, so it is a methodology decision rather than a mechanical fix, and it is not taken here.
+
+**Until it is done, removing the CIM files would knowingly degrade four public-domain indicators**,
+so F-13's rule 1 is held for those three files rather than applied blindly.
+
+**A second thing this exposed.** Every one of these indicators falls back to `base_inputs` —
+3-state sample data — *silently*, and the pipeline still reports success. A missing licensed input
+produces an index that looks complete and is not. `config/config.yml` has
+`use_sample_data: true`, so this is the live default. The coverage counts needed to catch it
+already exist in the manifest (`n_geographies`); what is missing is a gate that refuses to publish
+when an indicator is at sample-data coverage. That is the generalised form of F-05 and it should
+land before any further source is untracked.
 
 ---
 
