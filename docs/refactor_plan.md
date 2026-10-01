@@ -29,8 +29,8 @@ Severity is about the published index, not about code tidiness.
 | [F-09](#f-09) | medium | One CIM directory holds two different release vintages, and the facility schema gate fails silently | Phase 1 / 2 |
 | [F-10](#f-10) | medium | `FCC_PEA_website.xlsx` is read but untracked and unregistered | ✅ fixed in step 0c |
 | [F-20](#f-20) | **high** | The manufacturing fallback joins on the wrong key type, so three cluster indicators silently keep sample data | ✅ fixed, with a diff report |
-| [F-21](#f-21) | medium | A PEA spanning a state border emits duplicate `economic_area` rows | needs your decision |
-| [F-11](#f-11) | medium | Live network reads sit at script top level, breaking the no-network CI rule | Phase 2 |
+| [F-21](#f-21) | **high** | A PEA spanning a state border emits duplicate `economic_area` rows, which makes naive PEA diffs misleading | needs your decision — raised from medium, see F-11 |
+| [F-11](#f-11) | medium | Live network reads sit at script top level, breaking the no-network CI rule | ✅ fixed 2026-09-30, with a diff report; both sources were also 2 vintages stale |
 | [F-12](#f-12) | **high** | 19 of 21 staged EIA-860M workbooks are byte-identical HTML error pages; three are committed | Phase 2 |
 | [F-13](#f-13) | **governance** | Licensed third-party raw data is committed to a public MIT-licensed repository | needs your decision |
 | [F-14](#f-14) | high | No per-indicator vintage metadata exists anywhere | Phase 1 (the core gap) |
@@ -598,6 +598,59 @@ breaks the brief's rule that CI must pass with no network access. Both also sit 
 failure is unrecoverable.
 
 **Remedy.** Route both through the download registry with caching and fixtures.
+
+**Fixed 2026-09-30.** Both now go through cached, guarded loaders in
+[`process_data_helpers.R`](../R/utils/process_data_helpers.R):
+`load_census_county_population()` and `load_state_boundaries()`.
+
+CI sets `SKIP_DATA_DOWNLOADS: "true"`
+([`ci.yml:12`](../.github/workflows/ci.yml#L12)), so this was not hypothetical — **every CI run
+was making a live call to `www2.census.gov`** while the workflow declared it was not downloading
+anything. A Census outage would have failed CI with an error pointing at neither Census nor the
+network.
+
+Verified across the three states that matter:
+
+| scenario | result |
+|---|---|
+| cold offline (no cache, no network — what CI does) | **exit 0**, both degrade with an explicit message |
+| online | exit 0, picks up `co-est2025` and tiger `2025` |
+| warm offline (cache present, no network) | **exit 0, fully functional** |
+
+Degradation is deliberately loud. Both paths `message()` *and* `warn()`, because R defers warnings
+into a "There were N warnings" tally that is far too quiet for a missing denominator — the same
+reasoning as the QCEW connector.
+
+**Neither was only a network problem; both were also silently stale.**
+
+* The Census call pinned `co-est2023` *and* the `POPESTIMATE2023` column beside it. `co-est2025`
+  has been published, so the denominator was two vintages behind, and nothing could have revealed
+  it because the column name and the URL were hard-coded in lockstep. The vintage is now
+  discovered newest-first and **the population column is derived from whichever vintage resolves**,
+  so the two cannot drift apart again.
+* `tigris::states()` pinned `year = 2023`; it now discovers the newest available and caches the
+  resolved `sf` as RDS under `data/raw_cache/census/`.
+
+**Effect on published numbers** (both sides from `git archive origin/main`, identical `data/raw`,
+network allowed on both so the comparison isolates the vintage change):
+
+| output | result |
+|---|---|
+| state indicators | **0 of 33 moved**; headline index unchanged, 0 of 50 ranks moved |
+| `Electro-Industrial_pea.csv` (published PEA index) | **no numeric column moved**; row multiset identical |
+| `cluster_pea_inputs_processed.csv` | no numeric column moved |
+| `pea_electro.csv` | moves — `total` max \|Δ\| 0.029 across 159 of 325 PEAs |
+
+`pea_electro.csv` is the only thing that moves, and it is a reporting side-output: it is written
+but never read back by any index builder (verified). The movement is the per-capita rescaling you
+would expect from a two-vintage-newer population denominator.
+
+**A trap worth recording about the diff itself.** My first PEA comparison joined on
+`economic_area` alone and reported `cluster_index` moving by up to 0.399 across 100 rows. That was
+entirely an artefact: `Electro-Industrial_pea.csv` has 368 rows but only 325 distinct
+`economic_area` values (**F-21** — PEAs spanning a state border), so the join matched duplicates
+in both directions and produced symmetric ±pairs. Keying on `economic_area + state` shows nothing
+moved at all. F-21 is not just an untidy output; it makes naive PEA diffs actively misleading.
 
 ---
 
@@ -1540,7 +1593,7 @@ This departs from the brief in one respect, and only one: **two blockers land be
 | **0a** ✅ | Fix F-01 (two brace defects) and F-16 (undeclared packages) + `scripts/check_syntax.R` in CI | the pipeline must parse before anything can report on it; these were two independent blockers |
 | **0b** ✅ | Fix F-03 (test wd + fixture) and unblock F-19 (invalid `renv.lock`) | CI must be able to go green before a scheduled job starts filing issues |
 | **0c** ✅ | Make the pipeline complete: F-10 plus four further defects only a full run could surface (see below) | step 0a made the file *parse*; this makes `Rscript run_pipeline.R` *succeed* |
-| **0d** | F-11 (unguarded live Census read ignores `SKIP_DATA_DOWNLOADS`) | required by the brief's "CI must pass with no network access"; not yet a CI failure because runners have network |
+| **0d** ✅ | F-11 (unguarded live Census read ignores `SKIP_DATA_DOWNLOADS`) | required by the brief's "CI must pass with no network access"; CI was in fact calling `www2.census.gov` on every run while declaring it downloaded nothing |
 | **1** | Phase 1 as briefed — `sources.yml`, manifest, freshness engine, notifier | delivers value with zero connectors; the orphan check alone would have caught F-05 |
 | **1b** | Issues for F-04, F-05 (each its own PR, each with a diff report) | both move published numbers; needs your sign-off on F-04's bug-vs-methodology framing |
 | **2** | Phase 2 connectors, in the §5.2 shortlist order, 2–3 per PR | F-06, F-07, F-11, F-12 are fixed as part of the connectors that own those sources |

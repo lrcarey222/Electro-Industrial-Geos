@@ -310,7 +310,7 @@ sources:
     feeds: []
     publisher: "U.S. Census Bureau, Population Estimates Program"
     access_class: file_url
-    endpoint: "https://www2.census.gov/programs-surveys/popest/datasets/2020-2023/counties/totals/co-est2023-alldata.csv"
+    endpoint: "https://www2.census.gov/programs-surveys/popest/datasets/2020-{year}/counties/totals/co-est{year}-alldata.csv"
     auth_env: null
     geography: county-rolled-up
     cadence: annual
@@ -323,9 +323,21 @@ sources:
     can_commit_raw: true
     license: "Public domain (US Government work)"
     notes: >
-      Denominator only: supplies PEA population. Currently read from a live URL
-      at script top level with no cache and no guard, ignoring
-      SKIP_DATA_DOWNLOADS -- see F-11. The URL embeds its 2020-2023 vintage.
+      Denominator only: supplies PEA population.
+
+      CONNECTED 2026-09-30 -- load_census_county_population() in
+      R/utils/process_data_helpers.R. Cached, guarded and offline-safe. It was
+      previously an unguarded readr::read_csv() of a live URL at script top
+      level: no cache, no tryCatch, and it ignored SKIP_DATA_DOWNLOADS, so CI
+      made a network call despite the no-network rule and a Census outage would
+      have aborted the pipeline before any indicator was built (F-11).
+
+      The vintage is discovered newest-first, not pinned. The endpoint above is
+      a template; the decade start stays 2020 until the 2030 estimates begin.
+      The old call hard-coded co-est2023 AND the POPESTIMATE2023 column beside
+      it -- two vintages stale by 2026-09-30, since co-est2025 is published.
+      The population column is now derived from whichever vintage resolves, so
+      the two cannot drift apart again.
 
   - id: census_tiger_states
     label: "Census TIGER/Line state boundaries (via tigris)"
@@ -346,8 +358,17 @@ sources:
     license: "Public domain (US Government work)"
     notes: >
       Geometry only, used for the point-in-polygon assignment of BNEF data
-      centres to states. Fetched at runtime via tigris::states(year = 2023);
-      the year is hard-coded and the call needs network.
+      centres to states.
+
+      CONNECTED 2026-09-30 -- load_state_boundaries() in
+      R/utils/process_data_helpers.R. The year is discovered newest-first
+      instead of hard-coded at 2023, and the resolved sf object is cached as
+      RDS under data/raw_cache/census/ so later runs and CI work with no
+      network. tigris's own cache does not guarantee that on a cold runner.
+
+      When the geometry cannot be obtained the data-centre indicators are left
+      at their previous values with an explicit message, rather than aborting
+      the run -- the other 31 indicators do not depend on it (F-11).
 
   - id: fcc_pea_shapefile
     label: "FCC Partial Economic Area boundaries"
