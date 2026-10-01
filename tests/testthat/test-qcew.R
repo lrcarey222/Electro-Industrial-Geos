@@ -431,6 +431,84 @@ test_that("the latest annual year is discovered, not pinned", {
   expect_true(is.na(qcew_latest_annual_year(cache, from = 2030, max_back = 2L, offline = TRUE)))
 })
 
+# --- The vintage must be recorded, or the source rots unnoticed -------------
+
+test_that("period end is the last day the data covers", {
+  expect_equal(qcew_period_end("2025", "a"), as.Date("2025-12-31"))
+  expect_equal(qcew_period_end(2025, "1"), as.Date("2025-03-31"))
+  expect_equal(qcew_period_end(2025, "2"), as.Date("2025-06-30"))
+  expect_equal(qcew_period_end(2025, "3"), as.Date("2025-09-30"))
+  expect_equal(qcew_period_end(2025, "4"), as.Date("2025-12-31"))
+  expect_error(qcew_period_end(2025, "5"), "must be 1-4")
+  expect_error(qcew_period_end(2025, "annual"), "must be 1-4")
+})
+
+test_that("a completed fetch yields a manifest entry the engine can use", {
+  cache <- withr::local_tempdir()
+  for (cc in c(bundle_codes, "10")) {
+    file.copy(qcew_fixture("2025", cc), file.path(cache, sprintf("2025_a_%s.csv", cc)))
+  }
+  period <- qcew_fetch_period(bundle_codes, "2025", "a", cache, state_lookup(), offline = TRUE)
+  entry <- qcew_manifest_entry(period, "2025", "a")
+
+  expect_equal(entry$source_id, "bls_qcew")
+  # `pending` is what this exists to replace, so the status must be a real one.
+  expect_true(entry$status %in% manifest_statuses())
+  expect_equal(entry$status, "ok")
+  expect_equal(entry$publisher_release_date, "2025-12-31")
+  expect_equal(entry$vintage_label, "2025 annual")
+  expect_equal(entry$n_geographies, 50L)
+  expect_equal(entry$n_rows, 50L * length(bundle_codes))
+  expect_match(entry$sha256, "^[0-9a-f]{64}$")
+  expect_match(entry$schema_fingerprint, "^[0-9a-f]{64}$")
+  expect_match(entry$retrieved_at_utc, "^[0-9]{4}-[0-9]{2}-[0-9]{2}T")
+  # The suppression count travels with the vintage, not just in a side file.
+  expect_match(entry$notes, "withheld and read as NA")
+
+  # And it must actually survive a round trip through the manifest.
+  m <- manifest_upsert(manifest_empty(), entry)
+  expect_equal(nrow(m), 1L)
+  expect_equal(m$source_id, "bls_qcew")
+  expect_equal(m$publisher_release_date, "2025-12-31")
+})
+
+test_that("the digest pins the exact slices read, not just the period", {
+  cache_a <- withr::local_tempdir()
+  cache_b <- withr::local_tempdir()
+  for (cc in c(bundle_codes, "10")) {
+    file.copy(qcew_fixture("2025", cc), file.path(cache_a, sprintf("2025_a_%s.csv", cc)))
+    file.copy(qcew_fixture("2025", cc), file.path(cache_b, sprintf("2025_a_%s.csv", cc)))
+  }
+  lookup <- state_lookup()
+  a <- qcew_manifest_entry(
+    qcew_fetch_period(bundle_codes, "2025", "a", cache_a, lookup, offline = TRUE), "2025", "a"
+  )
+  # Identical inputs must digest identically...
+  b <- qcew_manifest_entry(
+    qcew_fetch_period(bundle_codes, "2025", "a", cache_b, lookup, offline = TRUE), "2025", "a"
+  )
+  expect_equal(a$sha256, b$sha256)
+
+  # ...and a changed input must not.
+  tampered <- readLines(file.path(cache_b, "2025_a_3342.csv"))
+  writeLines(c(tampered, tampered[length(tampered)]), file.path(cache_b, "2025_a_3342.csv"))
+  c_entry <- qcew_manifest_entry(
+    qcew_fetch_period(bundle_codes, "2025", "a", cache_b, lookup, offline = TRUE), "2025", "a"
+  )
+  expect_false(identical(a$sha256, c_entry$sha256))
+})
+
+test_that("an absent code is named in the manifest notes", {
+  cache <- withr::local_tempdir()
+  staged <- setdiff(bundle_codes, "5174")
+  for (cc in c(staged, "10")) {
+    file.copy(qcew_fixture("2025", cc), file.path(cache, sprintf("2025_a_%s.csv", cc)))
+  }
+  period <- qcew_fetch_period(bundle_codes, "2025", "a", cache, state_lookup(), offline = TRUE)
+  entry <- qcew_manifest_entry(period, "2025", "a")
+  expect_match(entry$notes, "no slice for 5174")
+})
+
 # --- Suppression is recorded, because it is the known weakness --------------
 
 test_that("state-level suppression stays in the range the design assumed", {

@@ -40,6 +40,7 @@ Severity is about the published index, not about code tidiness.
 | [F-18](#f-18) | medium | `Package:` is not a legal R package name, so the package can never be installed | needs your decision |
 | [F-19](#f-19) | **blocker** | `renv.lock` is structurally invalid, so `renv::restore()` aborts | ✅ unblocked in step 0b; real pinning deferred |
 | [F-23](#f-23) | **high** | `workforce_growth` was not a growth rate, and compared two different baskets of industries | ✅ fixed 2026-09-29, with a diff report |
+| [F-24](#f-24) | medium | Manifest `sha256` is line-ending sensitive, so a checkout can fake a source change | found 2026-09-30; not fixed |
 
 ---
 
@@ -1165,6 +1166,42 @@ changed.
 **Note the old values carried defect (2) identically** — same numerator — but the
 total-employment denominator compressed everything into a band too narrow for it to be visible.
 Making the indicator a growth rate did not introduce the contamination; it exposed it.
+
+---
+
+<a id="f-24"></a>
+### F-24 — Manifest `sha256` is line-ending sensitive *(medium — found, not fixed)*
+
+Found while connecting `bls_qcew` to the manifest. Re-running
+[`03_seed_manifest.R`](../scripts/03_seed_manifest.R) on a Windows checkout changed
+`gjf_subsidy_tracker`'s recorded hash:
+
+```
+- gjf_subsidy_tracker,...,awards-through-2024,9d376794798f84ca...,925,41,5e57e876...
++ gjf_subsidy_tracker,...,awards-through-2024,c2073e06d5465a19...,925,41,5e57e876...
+```
+
+`n_rows` (925), `n_geographies` (41) and `schema_fingerprint` are **identical**. Only the file
+digest moved, because git had normalised the file's line endings on checkout. The data did not
+change at all.
+
+**Why it matters.** `sha256` is the field that answers "is this the same file the published number
+came from". If it flips on checkout, then either it raises a false alarm about a publisher changing
+a file, or — worse — people learn to ignore it, which costs the manifest its main purpose. The two
+content-derived fields were stable throughout, so they are currently the trustworthy ones.
+
+This also means the hash cannot be compared across machines with different `core.autocrlf`
+settings, which includes comparing a developer's laptop against CI.
+
+**Remedy, not taken here.** Either digest normalised content for text sources (read, normalise
+newlines, hash the bytes) rather than the file as it sits on disk, or add a `.gitattributes`
+marking the staged data files `-text` so git never rewrites them. The second is smaller and also
+stops git corrupting a binary it misdetects as text; the first survives a misconfigured checkout.
+Either way it needs a decision about whether the recorded hash describes *the file* or *its
+content*, which changes what the field means.
+
+Not bundled into the QCEW manifest work: it touches every staged source's recorded hash, so it
+deserves its own PR and its own diff.
 
 ---
 
