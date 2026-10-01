@@ -1,3 +1,156 @@
+#' URL of a Census county population-estimates vintage
+#'
+#' Pattern verified live on 2026-09-30 for vintages 2022 through 2025:
+#' `.../popest/datasets/2020-{year}/counties/totals/co-est{year}-alldata.csv`.
+#' The decade start stays `2020` until the 2030 estimates begin.
+#'
+#' @param year Vintage year.
+#' @return The URL as a string.
+#' @export
+census_county_pop_url <- function(year) {
+  sprintf(
+    paste0(
+      "https://www2.census.gov/programs-surveys/popest/datasets/",
+      "2020-%d/counties/totals/co-est%d-alldata.csv"
+    ),
+    as.integer(year), as.integer(year)
+  )
+}
+
+#' Census county population estimates, cached and offline-safe
+#'
+#' Replaces an unguarded `readr::read_csv()` of a live URL that sat at the top
+#' level of `scripts/07_process_data.R`: no cache, no `tryCatch`, and no regard
+#' for `SKIP_DATA_DOWNLOADS`, so it both broke the no-network CI rule and could
+#' abort the whole pipeline before a single indicator was built
+#' (docs/refactor_plan.md F-11).
+#'
+#' The vintage is **discovered newest-first** rather than pinned. The old call
+#' hard-coded `co-est2023` and the `POPESTIMATE2023` column alongside it, while
+#' `co-est2025` has been published -- two vintages stale, and invisible because
+#' nothing compared the two. The population column is derived from whichever
+#' vintage resolves, so the two can no longer drift apart.
+#'
+#' @param cache_dir Directory for the cached CSV.
+#' @param offline Never touch the network; use cache or give up.
+#' @param from Newest vintage year to consider.
+#' @param max_back How many years to walk back before giving up.
+#' @return A list of `data` (a tibble of `FIPS`, `population`), `year` and
+#'   `path`; or `NULL` if no vintage could be obtained.
+#' @export
+load_census_county_population <- function(cache_dir,
+                                          offline = FALSE,
+                                          from = as.integer(format(Sys.Date(), "%Y")),
+                                          max_back = 5L) {
+  for (year in seq(from, from - max_back)) {
+    dest <- fs::path(cache_dir, sprintf("co-est%d-alldata.csv", year))
+
+    if (!fs::file_exists(dest)) {
+      if (isTRUE(offline)) {
+        next
+      }
+      fs::dir_create(cache_dir, recurse = TRUE)
+      ok <- tryCatch(
+        {
+          utils::download.file(census_county_pop_url(year), destfile = dest, mode = "wb", quiet = TRUE)
+          TRUE
+        },
+        error = function(e) FALSE,
+        warning = function(w) FALSE
+      )
+      # Census serves an HTML error page for an unpublished vintage rather than
+      # a clean 404, so size is checked as well as the download result.
+      if (!ok || !fs::file_exists(dest) || fs::file_size(dest) < 1000) {
+        if (fs::file_exists(dest)) fs::file_delete(dest)
+        next
+      }
+    }
+
+    parsed <- tryCatch(
+      readr::read_csv(dest, show_col_types = FALSE, progress = FALSE),
+      error = function(e) NULL
+    )
+    if (is.null(parsed)) {
+      next
+    }
+
+    pop_col <- paste0("POPESTIMATE", year)
+    required <- c("STATE", "COUNTY", pop_col)
+    if (!all(required %in% names(parsed))) {
+      # A vintage whose own estimate column is missing is not usable, and
+      # guessing a different column would silently change the denominator.
+      next
+    }
+
+    return(list(
+      year = as.character(year),
+      path = as.character(dest),
+      data = parsed %>%
+        dplyr::transmute(
+          FIPS = paste0(.data$STATE, .data$COUNTY),
+          population = suppressWarnings(as.numeric(.data[[pop_col]]))
+        )
+    ))
+  }
+  NULL
+}
+
+#' Census state boundaries, cached as a local artefact
+#'
+#' `tigris::states()` needs network on a cold cache, and the call it replaces
+#' hard-coded `year = 2023` inside the BNEF block (F-11). Caching the resolved
+#' `sf` object into the pipeline's own cache directory means later runs -- and
+#' CI -- work offline, which `tigris`'s internal cache alone does not guarantee.
+#'
+#' @param cache_dir Directory for the cached geometry.
+#' @param offline Never touch the network; use cache or give up.
+#' @param from Newest vintage year to consider.
+#' @param max_back How many years to walk back before giving up.
+#' @param exclude Territory abbreviations to drop.
+#' @return A list of `data` (an `sf` of `STATEFP`, `STUSPS`, `STATE`) and
+#'   `year`; or `NULL` if no vintage could be obtained.
+#' @export
+load_state_boundaries <- function(cache_dir,
+                                  offline = FALSE,
+                                  from = as.integer(format(Sys.Date(), "%Y")),
+                                  max_back = 5L,
+                                  exclude = c("PR", "VI", "GU", "MP", "AS")) {
+  shape <- function(sf_obj) {
+    sf_obj %>%
+      dplyr::filter(!.data$STUSPS %in% exclude) %>%
+      sf::st_transform(4326) %>%
+      dplyr::select(dplyr::all_of(c("STATEFP", "STUSPS")), STATE = "NAME")
+  }
+
+  for (year in seq(from, from - max_back)) {
+    dest <- fs::path(cache_dir, sprintf("census_tiger_states_%d.rds", year))
+
+    if (fs::file_exists(dest)) {
+      cached <- tryCatch(readRDS(dest), error = function(e) NULL)
+      if (!is.null(cached)) {
+        return(list(year = as.character(year), data = cached))
+      }
+    }
+    if (isTRUE(offline) || !requireNamespace("tigris", quietly = TRUE)) {
+      next
+    }
+
+    fetched <- tryCatch(
+      shape(tigris::states(cb = TRUE, year = year, class = "sf", progress_bar = FALSE)),
+      error = function(e) NULL,
+      warning = function(w) NULL
+    )
+    if (is.null(fetched) || nrow(fetched) == 0) {
+      next
+    }
+
+    fs::dir_create(cache_dir, recurse = TRUE)
+    tryCatch(saveRDS(fetched, dest), error = function(e) NULL)
+    return(list(year = as.character(year), data = fetched))
+  }
+  NULL
+}
+
 empty_facility_tbl <- function() {
   tibble::tibble(
     name = character(),

@@ -179,7 +179,31 @@ load_quarterly_gdp_growth <- function(raw_dir, states) {
       dplyr::mutate(economic_area = as.character(PEA_Name)) 
       
       
-county_pop <- readr::read_csv('https://www2.census.gov/programs-surveys/popest/datasets/2020-2023/counties/totals/co-est2023-alldata.csv')
+# Census county population, the PEA population denominator. Cached, guarded and
+# vintage-discovered: this was an unguarded read of a live URL at top level,
+# which ignored SKIP_DATA_DOWNLOADS and would abort the pipeline before any
+# indicator was built -- docs/refactor_plan.md F-11.
+skip_downloads_flag <- isTRUE(as.logical(Sys.getenv("SKIP_DATA_DOWNLOADS", "FALSE")))
+county_pop_source <- load_census_county_population(
+  fs::path(paths$cache_dir, "census"),
+  offline = skip_downloads_flag
+)
+if (is.null(county_pop_source)) {
+  # Not fatal: PEA population becomes NA and every PEA per-capita figure with
+  # it. Said out loud rather than left to a deferred warning tally, because a
+  # missing denominator silently becomes a missing indicator.
+  msg <- paste0(
+    "Census county population unavailable",
+    if (skip_downloads_flag) " (SKIP_DATA_DOWNLOADS=TRUE and nothing cached)" else "",
+    " -- PEA population will be NA."
+  )
+  message(msg)
+  rlang::warn(msg)
+  county_pop <- tibble::tibble(FIPS = character(), population = numeric())
+} else {
+  message("Census county population: co-est", county_pop_source$year, " vintage")
+  county_pop <- county_pop_source$data
+}
 
 # FCC PEA-to-county crosswalk, sheet 3 (`t_FCC_PEA_Counties`): 3,236 county rows
 # covering all 416 PEAs. Source:
@@ -197,19 +221,22 @@ if (!fs::file_exists(pea_county_path)) {
 }
 pea_counties <- read_excel(pea_county_path, 3)
 
+# `population` is already normalised by load_census_county_population(), so the
+# column name no longer carries the vintage year and cannot drift from the file
+# that supplied it.
 pea_pop <- pea_counties %>%
-  left_join(
-    county_pop %>%
-      mutate(FIPS = paste0(STATE, COUNTY)) %>%
-      select(FIPS, POPESTIMATE2023),
-    by = "FIPS"
-  ) %>%
+  left_join(county_pop, by = "FIPS") %>%
   left_join(
     pea_sf  %>% sf::st_drop_geometry() %>% select(PEA_Num, PEA_Name),
     by = c("FCC_PEA_Number" = "PEA_Num")
   ) %>%
   group_by(PEA_Name) %>%
-  summarize(pop=sum(POPESTIMATE2023,na.rm=T))
+  summarize(
+    # NA rather than 0 when nothing was disclosed for any county in the PEA: a
+    # zero-population PEA would read as real and divide per-capita figures by it.
+    pop = if (all(is.na(.data$population))) NA_real_ else sum(.data$population, na.rm = TRUE),
+    .groups = "drop"
+  )
 
 
 # ---- Base Inputs ---------------------------------------------------------
@@ -771,6 +798,11 @@ datacenter_raw <- if (is.na(datacenter_path)) {
 }
 datacenter_index <- NULL
 datacenter_mw <- NULL
+# Initialised here, not only inside the block below: the guards further down
+# test it, and relying on `&&` short-circuiting to avoid an undefined object is
+# the kind of fragility that made F-01 a blocker.
+states_sf <- NULL
+states_boundaries <- NULL
 if (!is.null(datacenter_raw)) {
   message("BNEF export: ", basename(datacenter_path))
 
@@ -807,10 +839,31 @@ if (!is.null(datacenter_raw)) {
 
   options(tigris_use_cache = TRUE)
 
-  states_sf <- tigris::states(cb = TRUE, year = 2023, class = "sf") %>%
-    dplyr::filter(!STUSPS %in% c("PR", "VI", "GU", "MP", "AS")) %>%
-    sf::st_transform(4326) %>% # match your points CRS
-    dplyr::select(STATEFP, STUSPS, STATE = NAME) # keep only useful cols
+  # Cached, guarded and no longer pinned to year = 2023 (F-11). The geometry is
+  # saved into the pipeline's own cache, so later runs and CI work offline --
+  # tigris's internal cache alone does not guarantee that.
+  states_boundaries <- load_state_boundaries(
+    fs::path(paths$cache_dir, "census"),
+    offline = skip_downloads_flag
+  )
+  states_sf <- if (is.null(states_boundaries)) NULL else states_boundaries$data
+}
+
+if (!is.null(datacenter_raw) && is.null(states_sf)) {
+  # The data-centre indicators need a point-in-polygon state assignment, so
+  # without geometry they cannot be built. Degrade loudly rather than abort: the
+  # other 31 indicators are unaffected.
+  msg <- paste0(
+    "Census state boundaries unavailable",
+    if (skip_downloads_flag) " (SKIP_DATA_DOWNLOADS=TRUE and nothing cached)" else "",
+    " -- datacenter_index and datacenter_mw will keep their previous values."
+  )
+  message(msg)
+  rlang::warn(msg)
+}
+
+if (!is.null(datacenter_raw) && !is.null(states_sf)) {
+  message("Census state boundaries: ", states_boundaries$year, " vintage")
 
   datacenter_fac <- datacenter_points %>%
     sf::st_join(states_sf, join = sf::st_within, left = TRUE) %>%
