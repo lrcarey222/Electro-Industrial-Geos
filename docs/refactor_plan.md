@@ -31,7 +31,7 @@ Severity is about the published index, not about code tidiness.
 | [F-20](#f-20) | **high** | The manufacturing fallback joins on the wrong key type, so three cluster indicators silently keep sample data | ✅ fixed, with a diff report |
 | [F-21](#f-21) | **high** | A PEA spanning a state border emits duplicate `economic_area` rows, which makes naive PEA diffs misleading | needs your decision — raised from medium, see F-11 |
 | [F-11](#f-11) | medium | Live network reads sit at script top level, breaking the no-network CI rule | ✅ fixed 2026-09-30, with a diff report; both sources were also 2 vintages stale |
-| [F-12](#f-12) | **high** | 19 of 21 staged EIA-860M workbooks are byte-identical HTML error pages; three are committed | Phase 2 |
+| [F-12](#f-12) | **high** | 19 of 21 staged EIA-860M workbooks are byte-identical HTML error pages; three are committed | ✅ fixed 2026-10-06 — downloads validated, stubs deleted, a second unguarded fetch closed |
 | [F-13](#f-13) | **governance** | Licensed third-party raw data is committed to a public MIT-licensed repository | BNEF, GJF, CNBC and C2ER untracked; 8 sources held pending [F-25](#f-25) |
 | [F-25](#f-25) | **high** | A licensed source supplies the population and GDP denominators for public-domain indicators | ✅ CIM retained (decision 2026-10-05); the silent sample-data fallback it exposed is now gated |
 | [F-14](#f-14) | high | No per-indicator vintage metadata exists anywhere | Phase 1 (the core gap) |
@@ -699,7 +699,51 @@ This is the exact scenario the brief's Phase 2.1 calls for: retry with backoff, 
 short-circuit, and **atomic write via temp file + rename so an interrupted download never leaves a
 half-file that looks valid**. It is already happening, at scale, in the committed tree.
 
-**Remedy.** Validate in `download_with_cache()` (status, content type, magic bytes), write via
+**Fixed 2026-10-06.** `download_with_cache()` now validates, heals and writes atomically, the three
+committed HTML stubs are deleted, and a second unguarded download was found and closed.
+
+Four changes:
+
+1. **Validate.** A response that is not the file that was asked for is rejected rather than cached.
+   The default validator is inferred from the extension: anything that sniffs as HTML is refused
+   unless HTML was requested, and `.xlsx`/`.zip` must start with `PK`.
+2. **Heal.** An existing cached file that fails validation is deleted and re-fetched. Previously
+   `fs::file_exists()` short-circuited forever, which is precisely how 19 error pages persisted.
+3. **Write atomically.** The download lands in a `.part` file beside the destination and is renamed
+   only once it validates, so a failed or interrupted fetch can never leave a half-file that looks
+   present.
+4. **Deduplicate.** `is_valid_xlsx()` was defined twice and applied only at *read* time. It now
+   lives once, in `utils_download.R`, applied at *write* time — where the poison was created.
+
+**A second unguarded download, found by measuring.** The EIA fallback loop
+([`07_process_data.R`](../scripts/07_process_data.R)) called `download_with_cache()` without
+checking `SKIP_DATA_DOWNLOADS`. CI declares it downloads nothing, yet **every CI run was pulling a
+14 MB workbook from eia.gov** — and that hidden fetch was the only reason `electric_capacity_growth`
+and `clean_electric_capacity_growth` had real data there. Same class as F-11, which named only two
+call sites. Now guarded, and the two indicators are declared in `validation.yml` as unavailable
+when inputs are unreachable, which is the honest position.
+
+**Three bugs in the fix itself, caught by testing against live URLs rather than fixtures.** Worth
+recording, because fixtures alone would have shipped all three:
+
+* `looks_like_html()` called `rawToChar()` on binary content, so sniffing a *genuine* 13.9 MB
+  workbook raised "invalid multibyte string" and the validator **rejected the real file**. Matching
+  is now done on raw bytes with `useBytes = TRUE`. A validator that rejects good data is worse than
+  the bug it replaces.
+* The `.xlsx` signature check converted bytes to a string first, for the same reason. It now
+  compares raw vectors.
+* A validator that *threw* escaped the cleanup path and left a `.part` file behind — the same
+  litter the function exists to prevent. Validation is now wrapped, and cleanup is registered with
+  `on.exit` before anything can fail.
+
+Verified live: a real workbook downloads and validates (13,955,142 bytes, `PK`); an unpublished
+month is refused as HTML with no file and **no `.part`** left behind.
+
+**Effect.** A live run is unchanged — 5 of 33 indicators on sample data, both capacity indicators
+real at 46 and 42 of 50. A CI run moves from 12 to **14 of 33**, which is not a regression but the
+removal of a false positive: those two indicators were never really available to CI.
+
+**Original remedy, for the record.** Validate in `download_with_cache()` (status, content type, magic bytes), write via
 temp + rename, and never trust mere existence. Then purge the 19 stubs from the working tree and
 the three from tracking.
 

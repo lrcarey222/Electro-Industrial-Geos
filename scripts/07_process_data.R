@@ -597,15 +597,9 @@ make_generator_source <- function(date) {
   )
 }
 
-is_valid_xlsx <- function(path) {
-  if (!fs::file_exists(path) || fs::file_size(path) <= 0) {
-    return(FALSE)
-  }
-  con <- file(path, "rb")
-  on.exit(close(con), add = TRUE)
-  sig <- readBin(con, what = "raw", n = 2)
-  identical(sig, charToRaw("PK"))
-}
+# is_valid_xlsx() comes from R/utils/utils_download.R, which is also where
+# download_with_cache() now applies it -- so a bad file is never cached in the
+# first place, rather than only being caught here at read time (F-12).
 
 generator_reference_date <- Sys.Date()
 candidate_start <- seq(generator_reference_date, length.out = 2, by = "-1 month")[2]
@@ -633,7 +627,12 @@ if (is.null(op_gen_raw)) {
     candidate_date <- seq(candidate_start, length.out = months_back + 1, by = "-1 month")[months_back + 1]
     candidate_src <- make_generator_source(candidate_date)
 
-    if (!fs::file_exists(candidate_src$path)) {
+    # Honours SKIP_DATA_DOWNLOADS. This loop previously fetched regardless,
+    # which is the same defect as F-11 and had a real consequence: CI declares
+    # it downloads nothing, yet every CI run was pulling a 14 MB workbook from
+    # eia.gov -- and that hidden fetch was the only reason the two capacity
+    # indicators had real data there.
+    if (!fs::file_exists(candidate_src$path) && !skip_downloads_flag) {
       candidate_cached <- tryCatch(
         download_with_cache(
           url = candidate_src$url,
