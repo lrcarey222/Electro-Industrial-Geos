@@ -1,0 +1,57 @@
+# Validation thresholds for the pipeline.
+#
+# `coverage` is the sample-data ratchet. The pipeline builds every indicator
+# from `base_inputs` and coalesces real data over the top, so a missing
+# producer leaves the indicator holding whatever `base_inputs` supplied while
+# the run still reports success. With `use_sample_data: true` and no
+# `data/inputs.csv` in the repo, that is the three-state fixture in
+# `data/examples/` -- California, Texas and New York published as if they were
+# the whole country. That is how eight of 33 indicators came to sit on sample
+# values in the published vintage (docs/refactor_plan.md F-05, F-25).
+#
+# A hard floor cannot be the gate, because sample data is the declared default.
+# So the lists below are a ratchet instead: they record which indicators are
+# KNOWN to be on sample data, and the gate fails when that set grows. Shrinking
+# the lists is the work; growing one requires a deliberate edit that a reviewer
+# can see.
+
+coverage:
+  # Below this many geographies a non-bleeding indicator is reported `sparse`.
+  # Informational: the thinnest real indicators are the semiconductor pair at
+  # 28 of 50, which is genuine coverage rather than a defect.
+  min_geographies: 10
+
+  # No producer exists in this repository at all, so these cannot be anything
+  # but sample data until one is built. Each is listed in
+  # docs/data_audit.md section 5.3 as untraced to any producer.
+  # Measured on a live run, 2026-10-05: exactly these five, 5 of 33.
+  allowed_sample_bleed:
+    - dsire_policy_count
+    - employment_lq
+    - feasibility_index
+    - industry_feasibility
+    - renewable_potential
+
+  # Additionally tolerated when the run cannot reach its inputs -- that is,
+  # SKIP_DATA_DOWNLOADS is set, which is what CI does. These indicators have
+  # real producers; CI simply has neither the licensed payloads (which are
+  # gitignored, by design) nor network access to fetch the rest.
+  #
+  # Measured against a true CI simulation, 2026-10-05: CI publishes 12 of 33
+  # indicators on sample data. That is a property of CI, not of the index --
+  # but it is the reason CI's index must never be mistaken for a published one.
+  allowed_when_inputs_unavailable:
+    - cnbc_rank          # CNBC, licensed; untracked 2026-10-01
+    - dev_policy_count   # C2ER, licensed; untracked 2026-10-01
+    - datacenter_index   # BloombergNEF, licensed; gitignored
+    - datacenter_mw      # BloombergNEF, licensed; gitignored
+    - incentives_gdp     # Good Jobs First, licensed; gitignored
+    - workforce_share    # BLS QCEW connector needs network
+    - workforce_growth   # BLS QCEW connector needs network
+
+# Tolerances for scripts/30_diff_outputs.R. Unchanged defaults, recorded here
+# so validation settings live in one file.
+diff:
+  index_abs: 0.02
+  subindex_abs: 0.05
+  rank_positions: 3

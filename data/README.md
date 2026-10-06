@@ -60,6 +60,18 @@ their source degrade to leaving their indicators untouched and say so on stdout.
 them to run offline. Currently `qcew_area_titles.csv` — BLS's own statewide `area_fips` titles,
 which give the FIPS-to-state mapping from the publisher rather than a hard-coded list.
 
+## Coverage
+
+`data/processed/indicator_coverage.csv` records, per indicator, how many geographies carry a value
+and whether those values are still the three-state fixture in `data/examples/`. It is written by
+the coverage gate on every run.
+
+The gate runs **before** outputs are written, so an index that has silently fallen back to sample
+data cannot reach a published file. It is a ratchet, not a floor: `config/validation.yml` declares
+which indicators are known to be on sample data, and the build fails when that set grows. A live
+run currently publishes 5 of 33 on sample data; a CI run publishes 12, because CI has neither the
+licensed payloads nor network access.
+
 ## Connector outputs
 
 `data/processed/qcew_coverage.csv` records, per state, how many bundle cells BLS disclosed,

@@ -33,7 +33,7 @@ Severity is about the published index, not about code tidiness.
 | [F-11](#f-11) | medium | Live network reads sit at script top level, breaking the no-network CI rule | ✅ fixed 2026-09-30, with a diff report; both sources were also 2 vintages stale |
 | [F-12](#f-12) | **high** | 19 of 21 staged EIA-860M workbooks are byte-identical HTML error pages; three are committed | Phase 2 |
 | [F-13](#f-13) | **governance** | Licensed third-party raw data is committed to a public MIT-licensed repository | BNEF, GJF, CNBC and C2ER untracked; 8 sources held pending [F-25](#f-25) |
-| [F-25](#f-25) | **high** | A licensed source supplies the population and GDP denominators for public-domain indicators | found 2026-10-01; blocks the rest of F-13 |
+| [F-25](#f-25) | **high** | A licensed source supplies the population and GDP denominators for public-domain indicators | ✅ CIM retained (decision 2026-10-05); the silent sample-data fallback it exposed is now gated |
 | [F-14](#f-14) | high | No per-indicator vintage metadata exists anywhere | Phase 1 (the core gap) |
 | [F-15](#f-15) | medium | DC is excluded from all state outputs; the brief assumes 50 states + DC | needs your decision |
 | [F-16](#f-16) | **blocker** | Four packages the pipeline loads are declared nowhere, so CI cannot install them | ✅ fixed in step 0a |
@@ -1324,10 +1324,34 @@ so F-13's rule 1 is held for those three files rather than applied blindly.
 **A second thing this exposed.** Every one of these indicators falls back to `base_inputs` —
 3-state sample data — *silently*, and the pipeline still reports success. A missing licensed input
 produces an index that looks complete and is not. `config/config.yml` has
-`use_sample_data: true`, so this is the live default. The coverage counts needed to catch it
-already exist in the manifest (`n_geographies`); what is missing is a gate that refuses to publish
-when an indicator is at sample-data coverage. That is the generalised form of F-05 and it should
-land before any further source is untracked.
+`use_sample_data: true`, so this is the live default.
+
+**Fixed 2026-10-05** by [`scripts/25_check_coverage.R`](../scripts/25_check_coverage.R), which runs
+between building the indices and writing outputs, so a degraded index cannot reach a published
+file. Decision taken the same day: **CIM is retained**, so the denominator swap above is not
+performed and `clean_tech_investment`, `evs_per_capita` and the rest keep their current sources.
+
+A hard floor could not be the gate, because sample data is the *declared default* — every run would
+fail. It is a **ratchet** instead: `config/validation.yml` records which indicators are known to be
+on sample data, and the gate fails when that set grows.
+
+Two lists, because there are two different reasons an indicator bleeds:
+
+| list | meaning | count |
+|---|---|---|
+| `allowed_sample_bleed` | no producer exists in this repository at all | **5** |
+| `allowed_when_inputs_unavailable` | has a producer, but this run could not reach it (`SKIP_DATA_DOWNLOADS`) | 7 |
+
+Measured 2026-10-05: a **live run publishes 5 of 33 indicators on sample data** — exactly the five
+listed in [`data_audit.md` §5.3](data_audit.md) as untraced to any producer. A **CI run publishes
+12 of 33**, because CI has neither the licensed payloads (gitignored by design) nor network access.
+That second number is a property of CI, not of the index, but it is the reason a CI build's index
+must never be mistaken for a published one.
+
+Verified three ways: a live run passes at 5; the CI simulation passes at 12; and deleting one name
+from the declared list makes that indicator's bleed undeclared, which aborts the run naming it —
+`outputs/` contained **0 files** afterwards, so the claim that outputs were not written is
+measured rather than asserted.
 
 ---
 

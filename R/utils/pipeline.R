@@ -22,6 +22,9 @@ run_Electro_Industrial_pipeline <- function(root = NULL) {
     "07_process_data.R",
     "10_build_themes.R",
     "20_build_indices.R",
+    # Deliberately before the write stage: an index that has silently fallen
+    # back to three-state sample data must not reach a published file.
+    "25_check_coverage.R",
     "80_write_outputs.R"
   )
 
