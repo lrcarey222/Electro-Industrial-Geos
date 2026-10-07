@@ -18,7 +18,7 @@ Severity is about the published index, not about code tidiness.
 | id | severity | finding | phase / status |
 |---|---|---|---|
 | [F-01](#f-01) | **blocker** | The pipeline does not run: `scripts/07_process_data.R` fails to parse | ✅ fixed in step 0a |
-| [F-02](#f-02) | **blocker** | The canonical methodology script does not parse and is not self-contained | ⚠️ **reopened** — a working upstream was found, see [`legacy_parity.md`](legacy_parity.md) |
+| [F-02](#f-02) | **blocker** | The canonical methodology script does not parse and is not self-contained | ✅ decided 2026-10-05 — kept as a labelled historical record; `scripts/` is canonical, parity unverified |
 | [F-22](#f-22) | **high** | The refactor doubled the employment NAICS bundle; fixing F-05 would ship that silently | ✅ decided 2026-09-17: **broad** definition, documented in `methodology.md` |
 | [F-03](#f-03) | **high** | The test suite executes zero assertions; the one parity check compares against `NULL` | ✅ fixed in step 0b |
 | [F-04](#f-04) | **high** | EIA electricity price reads the **residential** column, not industrial — a regression against the committed vintage | ✅ fixed, with a diff report |
@@ -35,7 +35,7 @@ Severity is about the published index, not about code tidiness.
 | [F-13](#f-13) | **governance** | Licensed third-party raw data is committed to a public MIT-licensed repository | BNEF, GJF, CNBC and C2ER untracked; 8 sources held pending [F-25](#f-25) |
 | [F-25](#f-25) | **high** | A licensed source supplies the population and GDP denominators for public-domain indicators | ✅ CIM retained (decision 2026-10-05); the silent sample-data fallback it exposed is now gated |
 | [F-14](#f-14) | high | No per-indicator vintage metadata exists anywhere | Phase 1 (the core gap) |
-| [F-15](#f-15) | medium | DC is excluded from all state outputs; the brief assumes 50 states + DC | needs your decision |
+| [F-15](#f-15) | medium | DC is excluded from all state outputs; the brief assumes 50 states + DC | ✅ decided 2026-10-05 — 50 states only, recorded in `methodology.md` |
 | [F-16](#f-16) | **blocker** | Four packages the pipeline loads are declared nowhere, so CI cannot install them | ✅ fixed in step 0a |
 | [F-17](#f-17) | **blocker** | `DESCRIPTION` is not a readable control file, so CI has never installed *any* dependency | ✅ fixed in step 0a |
 | [F-18](#f-18) | medium | `Package:` is not a legal R package name, so the package can never be installed | needs your decision |
@@ -169,6 +169,26 @@ methodology-provenance decision, not an engineering one.
 
 **Until this resolves, `Legacy Script/` must not be deleted** — which is what the brief already
 says.
+
+**Decided 2026-10-05: option (3), with the file kept.** `Legacy Script/` stays as a **historical
+record**, explicitly labelled as not runnable, and `scripts/` is canonical. Numerical parity
+against the original was never established and is not going to be.
+
+A header to that effect is now at the top of the file itself, not only in this log, because the
+failure mode is someone opening the script and treating it as the executable specification. It
+states the three independent reasons it cannot run: it does not parse, it reads seven objects
+defined nowhere in this repository (`bundle_lq` among them), and its hyphenated identifiers are not
+valid R.
+
+Also recorded in [`methodology.md`](methodology.md), whose opening line previously described the
+legacy script as the thing this repository "implements as specified" — which was the source of the
+confusion.
+
+**What this costs, stated plainly.** The refactor's numerical fidelity to the original is now
+permanently unverified. [`legacy_parity.md`](legacy_parity.md) compares against a *working earlier
+version found in a separate repository*, which is the best available evidence but is not the same
+artefact. Anyone asking "does this reproduce the original index?" should be told: no one knows, and
+the original cannot be run to find out.
 
 ---
 
@@ -926,6 +946,22 @@ I have changed nothing. Flagging it because it is a coverage decision disguised 
 rule: `where applicable` needs to be pinned down per source before the validator is written. Note
 that several upstream sources do carry DC (CIM socioeconomics, EIA-861M, BEA), so the exclusion is
 this pipeline's choice, not a data limitation.
+
+**Decided 2026-10-05: DC stays excluded.** The index covers the 50 states.
+
+No code changes, because `states <- tibble(state = state.name, abbr = state.abb)` already produces
+exactly that. What was missing was the decision being written down — until now the exclusion was a
+side effect of a base-R constant rather than a stated scope, which is precisely the kind of thing
+that gets "fixed" later by someone who assumes it was an oversight.
+
+Recorded in [`methodology.md`](methodology.md#geographic-scope) so it is visible where the index is
+defined rather than only in a findings log. The brief's "50 states + DC where applicable" is
+therefore answered: **not applicable**, deliberately.
+
+The consequence worth knowing is that several upstream sources *do* carry DC — CIM socioeconomics,
+EIA-861M, BEA — so those rows are dropped on the join rather than never fetched. That is the right
+behaviour for a 50-state index, but it means a DC row appearing in an input file is not a sign of
+anything wrong.
 
 ---
 

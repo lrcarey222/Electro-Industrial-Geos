@@ -1,3 +1,29 @@
+# =============================================================================
+# HISTORICAL RECORD -- THIS SCRIPT DOES NOT RUN. DO NOT TREAT IT AS THE SPEC.
+# =============================================================================
+#
+# Kept deliberately (decision 2026-10-05) as the provenance of the index. The
+# canonical, runnable implementation is scripts/ plus R/, driven by
+# run_pipeline.R.
+#
+# Three independent reasons this file cannot be executed:
+#
+#   1. It does not parse.
+#   2. It is not self-contained: it reads at least seven objects that are
+#      defined nowhere in this repository, `bundle_lq` among them.
+#   3. Several identifiers are hyphenated, which is not valid R.
+#
+# Numerical parity between this script and the current pipeline was never
+# established and will not be -- the original cannot be run to compare against.
+# docs/legacy_parity.md compares instead against a working earlier version
+# found in a separate repository, which is the best available evidence but is
+# not the same artefact.
+#
+# See docs/refactor_plan.md F-02 and docs/methodology.md.
+#
+# scripts/check_syntax.R excludes this directory for exactly this reason.
+# =============================================================================
+
 #Electro-Industrial Index
 
 

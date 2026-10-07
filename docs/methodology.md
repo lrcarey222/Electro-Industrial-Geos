@@ -2,6 +2,35 @@
 
 This repository implements the Electro-Industrial Index as specified in `Legacy Script/Electro-Industrial_State.R`. The refactor keeps the index logic identical while organizing the pipeline and configs in an OSI-style structure.
 
+> **Note on the legacy script.** `Legacy Script/Electro-Industrial_State.R` is kept as a
+> **historical record and is not runnable**. It does not parse, and it is not self-contained — it
+> reads objects, such as `bundle_lq`, that are defined nowhere in this repository. Do not treat it
+> as the executable specification; the pipeline under `scripts/` is. A working earlier version of
+> the same analysis was found in a separate repository and is compared against this one in
+> [`legacy_parity.md`](legacy_parity.md). Decision 2026-10-05: keep it, labelled. See
+> `refactor_plan.md` F-02.
+
+## Geographic scope
+
+**The index covers the 50 states. Washington DC is excluded, deliberately, and so are the
+territories.**
+
+This has always been the behaviour — `states <- tibble(state = state.name, abbr = state.abb)` is
+the spine of every state-level join, and base R's constants are the 50 states — but until
+2026-10-05 it was a side effect of a constant rather than a stated scope. It is recorded here so it
+is not later "fixed" by someone who assumes it was an oversight.
+
+Two consequences worth knowing:
+
+* Several upstream sources **do** carry DC — CIM socioeconomics, EIA-861M, BEA — so those rows are
+  dropped on the join rather than never fetched. A DC row in an input file is not a sign of
+  anything wrong.
+* Adding DC later would change **every** published score, not just add a row, because min-max
+  scaling is relative to the observed range. It is a re-baselining, not an extension.
+
+PEA-level outputs follow the same rule: the FCC crosswalk's non-state entries (Puerto Rico, the
+Virgin Islands) are dropped, so every PEA resolves to one of the 50 states.
+
 ## Sub-index definitions
 
 ### Policy Intent
