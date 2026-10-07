@@ -41,7 +41,7 @@ Severity is about the published index, not about code tidiness.
 | [F-18](#f-18) | medium | `Package:` is not a legal R package name, so the package can never be installed | needs your decision |
 | [F-19](#f-19) | **blocker** | `renv.lock` is structurally invalid, so `renv::restore()` aborts | ✅ unblocked in step 0b; real pinning deferred |
 | [F-23](#f-23) | **high** | `workforce_growth` was not a growth rate, and compared two different baskets of industries | ✅ fixed 2026-09-29, with a diff report |
-| [F-24](#f-24) | medium | Manifest `sha256` is line-ending sensitive, so a checkout can fake a source change | found 2026-09-30; not fixed |
+| [F-24](#f-24) | medium | Manifest `sha256` is line-ending sensitive, so a checkout can fake a source change | ✅ decided 2026-10-05, fixed 2026-10-07 — content is hashed, line endings normalised |
 
 ---
 
@@ -1367,6 +1367,37 @@ content*, which changes what the field means.
 
 Not bundled into the QCEW manifest work: it touches every staged source's recorded hash, so it
 deserves its own PR and its own diff.
+
+**Decided 2026-10-05, fixed 2026-10-07: fingerprint the content and ignore line endings.**
+
+`file_sha256()` now normalises CRLF and lone CR to LF before hashing **text** files, and hashes
+**binary** files exactly as they are — rewriting bytes inside a ZIP or shapefile would be
+corruption, not normalisation. Binary is decided by **content**, not extension: a NUL byte in the
+first 8 KB. Extension-based guessing would misclassify the less familiar formats this pipeline
+reads, and being wrong in the binary direction would corrupt a digest.
+
+**Effect, measured by re-seeding the manifest.** 9 of 24 recorded hashes changed, and for **every
+one of them** the row count, geography count and schema fingerprint are byte-identical:
+
+| source | rows | geographies | schema |
+|---|---|---|---|
+| `climate_legislation` | 2545 → 2545 | — | same |
+| `cnbc_state_rankings` | 50 → 50 | — | same |
+| `cpcn_requirements` | 50 → 50 | 50 → 50 | same |
+| `dev_program_db` | 2444 → 2444 | 56 → 56 | same |
+| `drone_facility_announcements` | 12 → 12 | 9 → 9 | same |
+| `gjf_subsidy_tracker` | 925 → 925 | 41 → 41 | same |
+| `regdata_subnational` | 69 → 69 | 69 → 69 | same |
+| `solar_ordinances` | 1412 → 1412 | 33 → 33 | same |
+| `state_sepa` | 50 → 50 | 50 → 50 | same |
+
+**Zero** sources where the content facts also moved, which is the evidence that this is a
+representation fix and not a data change. The 15 unchanged hashes are the binary sources plus the
+CSVs that were already LF on disk — for identical bytes the old and new methods agree, so an
+unchanged hash is itself a check that nothing was rewritten unnecessarily.
+
+The one-time churn is deliberate: after this, the same data digests the same on a laptop and in CI,
+whatever `core.autocrlf` is set to.
 
 ---
 
