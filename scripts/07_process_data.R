@@ -238,6 +238,47 @@ pea_pop <- pea_counties %>%
     .groups = "drop"
   )
 
+# One state per PEA, for attaching state-level context to a PEA-level row.
+# A PEA stays a geography in its own right -- 106 of 416 span a state border --
+# but the index has to pick one state's workforce and price figures, and the
+# answer is the state holding the largest share of the PEA's population. See
+# pea_dominant_state() and docs/refactor_plan.md F-21.
+pea_state_attribution <- pea_dominant_state(pea_counties, county_pop) %>%
+  left_join(
+    pea_sf %>% sf::st_drop_geometry() %>% select(PEA_Num, PEA_Name),
+    by = c("FCC_PEA_Number" = "PEA_Num")
+  ) %>%
+  filter(!is.na(.data$PEA_Name)) %>%
+  transmute(
+    economic_area = as.character(.data$PEA_Name),
+    abbr = .data$abbr,
+    pea_states = .data$n_states,
+    pea_dominant_share = .data$dominant_share
+  )
+
+message(sprintf(
+  "PEA attribution: %d PEAs, %d spanning more than one state",
+  nrow(pea_state_attribution), sum(pea_state_attribution$pea_states > 1, na.rm = TRUE)
+))
+
+# Every (PEA, state) pair, which is a different question from which state
+# dominates. The state-level cluster index inherits from the best PEA that
+# OVERLAPS the state, so without this Connecticut, New Jersey and Rhode Island
+# -- which dominate no PEA -- would silently score 0.
+pea_state_membership <- pea_counties %>%
+  transmute(
+    FCC_PEA_Number = .data$FCC_PEA_Number,
+    abbr = stringr::str_trim(as.character(.data$State))
+  ) %>%
+  filter(.data$abbr %in% state.abb) %>%
+  left_join(
+    pea_sf %>% sf::st_drop_geometry() %>% select(PEA_Num, PEA_Name),
+    by = c("FCC_PEA_Number" = "PEA_Num")
+  ) %>%
+  filter(!is.na(.data$PEA_Name)) %>%
+  left_join(states, by = "abbr") %>%
+  distinct(economic_area = as.character(.data$PEA_Name), state = .data$state, abbr = .data$abbr)
+
 
 # ---- Base Inputs ---------------------------------------------------------
 base_inputs <- if (isTRUE(paths$use_sample_data)) {
@@ -1060,18 +1101,23 @@ if (!is.null(facility_raw)) {
               sf::st_as_sf(coords = c("longitude", "latitude"), crs = 4326, remove = FALSE)
 
             if (nrow(pea_points) > 0) {
+              # Per PEA, not per PEA-and-state: the anchors belong to the whole
+              # economic area, and its state context comes from
+              # pea_state_attribution. Grouping by state here would reintroduce
+              # the duplicate rows F-21 is about, and the join below would then
+              # miss any PEA whose facilities sit outside its dominant state.
               cluster_pea_manufacturing <- pea_points %>%
                 sf::st_join(pea_sf, join = sf::st_intersects, left = FALSE) %>%
                 sf::st_drop_geometry() %>%
                 dplyr::filter(!is.na(.data$economic_area)) %>%
-                dplyr::group_by(.data$economic_area, .data$technology, .data$state) %>%
+                dplyr::group_by(.data$economic_area, .data$technology) %>%
                 dplyr::summarize(value = sum(.data$capex, na.rm = TRUE), .groups = "drop") %>%
                 tidyr::pivot_wider(names_from = .data$technology, values_from = .data$value, values_fill = 0) %>%
-                dplyr::mutate(abbr = .data$state) %>%
-                dplyr::left_join(states, by = c("abbr" = "abbr")) %>%
+                dplyr::left_join(pea_state_attribution, by = "economic_area") %>%
+                dplyr::left_join(states, by = "abbr") %>%
                 dplyr::transmute(
                   economic_area = .data$economic_area,
-                  state = dplyr::coalesce(.data$state.y, .data$state.x),
+                  state = .data$state,
                   abbr = .data$abbr,
                   battery_manufacturing = .data$battery_manufacturing,
                   solar_manufacturing = .data$solar_manufacturing,
@@ -1665,9 +1711,13 @@ if (is.null(cluster_pea_inputs) || nrow(cluster_pea_inputs) == 0) {
         dplyr::filter(!is.na(.data$economic_area), !is.na(.data$state_abbr))
 
       if (nrow(pea_facilities) > 0) {
+        # A PEA is a geography in its own right, so the facility anchors are
+        # summed across the WHOLE PEA rather than sliced by state. Grouping by
+        # (economic_area, state_abbr) is what emitted one row per state and made
+        # `Yuma, AZ` appear as both California and Arizona -- F-21.
         pea_indicator_rollup <- pea_facilities %>%
           dplyr::mutate(cat_lower = stringr::str_to_lower(as.character(.data$cat))) %>%
-          dplyr::group_by(.data$economic_area, .data$state_abbr) %>%
+          dplyr::group_by(.data$economic_area) %>%
           dplyr::summarize(
             datacenter_mw = sum(dplyr::if_else(stringr::str_detect(.data$cat_lower, "data"), .data$size, 0), na.rm = TRUE),
             semiconductor_manufacturing = sum(dplyr::if_else(stringr::str_detect(.data$cat_lower, "semiconductor"), .data$size, 0), na.rm = TRUE),
@@ -1676,11 +1726,14 @@ if (is.null(cluster_pea_inputs) || nrow(cluster_pea_inputs) == 0) {
             ev_manufacturing = sum(dplyr::if_else(stringr::str_detect(.data$cat_lower, "ev|vehicle"), .data$size, 0), na.rm = TRUE),
             .groups = "drop"
           ) %>%
-          dplyr::left_join(states, by = c("state_abbr" = "abbr")) %>%
+          # State context comes from the state holding the largest share of the
+          # PEA's population, not from whichever state a facility sat in.
+          dplyr::left_join(pea_state_attribution, by = "economic_area") %>%
+          dplyr::left_join(states, by = "abbr") %>%
           dplyr::transmute(
             economic_area,
             state,
-            abbr = .data$state_abbr,
+            abbr = .data$abbr,
             datacenter_mw,
             semiconductor_manufacturing,
             battery_manufacturing,
@@ -1749,17 +1802,19 @@ if (is.null(cluster_pea_inputs) || nrow(cluster_pea_inputs) == 0) {
           sf::st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326, remove = FALSE)
 
         
+          # Summed over the whole PEA, and keyed on the PEA alone. Grouping by
+          # state here and joining on (economic_area, abbr) would now miss
+          # every PEA whose capacity sits outside its dominant state -- F-21.
           cluster_pea_clean_electric_capacity_growth <- pea_points %>%
             sf::st_join(pea_sf, join = sf::st_intersects, left = FALSE) %>%
             sf::st_drop_geometry() %>%
-            dplyr::filter(!is.na(.data$economic_area), !is.na(.data$state_abbr)) %>%
-            dplyr::group_by(.data$economic_area, .data$state_abbr) %>%
-            dplyr::summarize(clean_electric_capacity_growth_pea = sum(.data$size, na.rm = TRUE), .groups = "drop") %>%
-            dplyr::rename(abbr = .data$state_abbr)
+            dplyr::filter(!is.na(.data$economic_area)) %>%
+            dplyr::group_by(.data$economic_area) %>%
+            dplyr::summarize(clean_electric_capacity_growth_pea = sum(.data$size, na.rm = TRUE), .groups = "drop")
 
 
   cluster_pea_inputs <- cluster_pea_inputs %>%
-    dplyr::left_join(cluster_pea_clean_electric_capacity_growth, by = c("economic_area", "abbr")) %>%
+    dplyr::left_join(cluster_pea_clean_electric_capacity_growth, by = "economic_area") %>%
     dplyr::mutate(
       clean_electric_capacity_growth = dplyr::coalesce(.data$clean_electric_capacity_growth_pea, .data$clean_electric_capacity_growth)
     ) %>%
@@ -1794,7 +1849,9 @@ if (is.null(cluster_pea_manufacturing)) {
           solar_manufacturing_cim = .data$solar_manufacturing,
           ev_manufacturing_cim = .data$ev_manufacturing
         ),
-      by = c("economic_area", "abbr")
+      # Keyed on the PEA alone: `abbr` is now the PEA's dominant state rather
+      # than a facility's state, so it is an attribute of the row, not a key.
+      by = "economic_area"
     ) %>%
     dplyr::mutate(
       battery_manufacturing = dplyr::coalesce(.data$battery_manufacturing_cim, .data$battery_manufacturing),

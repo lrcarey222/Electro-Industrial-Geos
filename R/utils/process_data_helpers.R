@@ -151,6 +151,92 @@ load_state_boundaries <- function(cache_dir,
   NULL
 }
 
+#' The state that makes up the largest share of each PEA
+#'
+#' A Partial Economic Area is a geography in its own right and 106 of the 416
+#' PEAs span more than one state. The index nonetheless has to attach
+#' state-level context -- workforce, electricity price, capacity growth -- to
+#' each PEA, and that requires choosing one state per PEA.
+#'
+#' Previously no choice was made: the PEA rollup grouped by
+#' `(economic_area, state_abbr)`, so a PEA straddling a border emitted one row
+#' per state and `Yuma, AZ` appeared as both California and Arizona
+#' (docs/refactor_plan.md F-21). That is also what made naive PEA diffs
+#' misleading, since the duplicate keys matched each other.
+#'
+#' **Share is measured by population.** The index is an economic measure, so
+#' the state where most of a PEA's people live is the state whose economic
+#' context applies to it. Land area would weight empty desert equally with a
+#' metro, and county count would weight a rural county equally with a city.
+#'
+#' Ties, and the case where no population is available at all (an offline run),
+#' fall back to county count and then to alphabetical order, so the result is
+#' always deterministic rather than dependent on row order.
+#'
+#' @param pea_counties The FCC crosswalk: `FCC_PEA_Number`, `FIPS`, `State`.
+#' @param county_pop County population: `FIPS`, `population`. May be empty.
+#' @return One row per PEA: `FCC_PEA_Number`, `abbr`, `n_states`,
+#'   `dominant_population`, `dominant_share`.
+#' @export
+pea_dominant_state <- function(pea_counties, county_pop) {
+  required <- c("FCC_PEA_Number", "FIPS", "State")
+  missing <- setdiff(required, names(pea_counties))
+  if (length(missing) > 0) {
+    rlang::abort(glue::glue(
+      "pea_dominant_state(): crosswalk is missing {paste(missing, collapse = ', ')}."
+    ))
+  }
+
+  pop <- if (is.null(county_pop) || nrow(county_pop) == 0) {
+    tibble::tibble(FIPS = character(), population = numeric())
+  } else {
+    county_pop %>%
+      dplyr::transmute(
+        FIPS = as.character(.data$FIPS),
+        population = suppressWarnings(as.numeric(.data$population))
+      )
+  }
+
+  pea_counties %>%
+    dplyr::transmute(
+      FCC_PEA_Number = .data$FCC_PEA_Number,
+      FIPS = as.character(.data$FIPS),
+      abbr = stringr::str_trim(as.character(.data$State))
+    ) %>%
+    dplyr::filter(.data$abbr %in% state.abb) %>%
+    dplyr::left_join(pop, by = "FIPS") %>%
+    dplyr::group_by(.data$FCC_PEA_Number, .data$abbr) %>%
+    dplyr::summarize(
+      population = sum(.data$population, na.rm = TRUE),
+      n_counties = dplyr::n(),
+      .groups = "drop"
+    ) %>%
+    dplyr::group_by(.data$FCC_PEA_Number) %>%
+    dplyr::mutate(
+      n_states = dplyr::n(),
+      total_population = sum(.data$population, na.rm = TRUE)
+    ) %>%
+    # Deterministic ordering: population, then county count, then abbreviation.
+    dplyr::arrange(
+      dplyr::desc(.data$population), dplyr::desc(.data$n_counties), .data$abbr,
+      .by_group = TRUE
+    ) %>%
+    dplyr::slice(1L) %>%
+    dplyr::ungroup() %>%
+    dplyr::transmute(
+      FCC_PEA_Number = .data$FCC_PEA_Number,
+      abbr = .data$abbr,
+      n_states = as.integer(.data$n_states),
+      dominant_population = .data$population,
+      dominant_share = dplyr::if_else(
+        .data$total_population > 0,
+        .data$population / .data$total_population,
+        NA_real_
+      )
+    ) %>%
+    dplyr::arrange(.data$FCC_PEA_Number)
+}
+
 empty_facility_tbl <- function() {
   tibble::tibble(
     name = character(),

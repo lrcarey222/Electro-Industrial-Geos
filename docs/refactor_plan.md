@@ -29,7 +29,7 @@ Severity is about the published index, not about code tidiness.
 | [F-09](#f-09) | medium | One CIM directory holds two different release vintages, and the facility schema gate fails silently | Phase 1 / 2 |
 | [F-10](#f-10) | medium | `FCC_PEA_website.xlsx` is read but untracked and unregistered | ✅ fixed in step 0c |
 | [F-20](#f-20) | **high** | The manufacturing fallback joins on the wrong key type, so three cluster indicators silently keep sample data | ✅ fixed, with a diff report |
-| [F-21](#f-21) | **high** | A PEA spanning a state border emits duplicate `economic_area` rows, which makes naive PEA diffs misleading | needs your decision — raised from medium, see F-11 |
+| [F-21](#f-21) | **high** | A PEA spanning a state border emits duplicate `economic_area` rows, which makes naive PEA diffs misleading | ✅ decided 2026-10-05, fixed 2026-10-06 — one row per PEA, state context from the dominant state |
 | [F-11](#f-11) | medium | Live network reads sit at script top level, breaking the no-network CI rule | ✅ fixed 2026-09-30, with a diff report; both sources were also 2 vintages stale |
 | [F-12](#f-12) | **high** | 19 of 21 staged EIA-860M workbooks are byte-identical HTML error pages; three are committed | Phase 2 |
 | [F-13](#f-13) | **governance** | Licensed third-party raw data is committed to a public MIT-licensed repository | BNEF, GJF, CNBC and C2ER untracked; 8 sources held pending [F-25](#f-25) |
@@ -1134,6 +1134,49 @@ state, or a geography that can be split across states? Either answer is defensib
 a different fix (assign each PEA to its dominant state, or key every PEA output on
 `economic_area + state` and say so in the data dictionary). Because it determines what a row of the
 PEA index *means*, it is a methodology decision and I have not made it.
+
+**Decided 2026-10-05, fixed 2026-10-06.** A PEA is a geography in its own right. It is not split
+across states, and state-level variables come from **the state holding the largest share of the
+PEA**. Share is measured by population: the index is an economic measure, so the state where most
+of a PEA's people live is the state whose economic context applies. Land area would weight empty
+desert equally with a metro; county count would weight a rural county equally with a city. Ties,
+and the case where no population is available (an offline run), fall back to county count and then
+to alphabetical order, so the answer never depends on row order.
+
+`pea_dominant_state()` computes it from the FCC county crosswalk and Census county population.
+**106 of 416 PEAs cross a state line**, so this is a quarter of the index, not an edge case.
+
+| | before | after |
+|---|---|---|
+| rows in `Electro-Industrial_pea.csv` | 405 | **351** |
+| distinct `economic_area` | 351 | 351 |
+| **duplicated keys** | **54** | **0** |
+
+49 PEAs previously emitted more than one row. `Baltimore, MD-Washington, DC` appeared as both
+Virginia (0.759) and Maryland (0.433); it is now Maryland alone. The facility anchors are also
+summed over the whole PEA rather than sliced by state, which is what makes a single row meaningful.
+
+**A defect this introduced, caught before shipping.** The old duplication was quietly doing a
+second job: supplying the state↔PEA *membership* that the state-level cluster index needs, because
+a state inherits its best-scoring PEA. Under dominance-only attribution, **Connecticut, New Jersey
+and Rhode Island dominate no PEA at all** — they are absorbed into larger multi-state metros — so
+their state cluster index collapsed to **0** and they fell 6–7 rank places. Zero, not `NA`, so it
+would have read as a real score.
+
+Membership and dominance are different questions and are now computed separately:
+`build_state_cluster_from_pea()` takes an explicit membership table, so a state inherits the best
+PEA that *overlaps* it. Connecticut and New Jersey now inherit the New York PEA (0.656), which is
+the economic area they genuinely belong to.
+
+**Effect.** All 33 state-level *indicators* are byte-identical. Only the state `cluster_index`
+moves (max |Δ| 0.365 across 38 states), because it is derived from the PEA clusters; the other five
+sub-indices are untouched. Headline state index max |Δ| 0.056. At PEA level, 350 of 351 cluster
+values move, which is expected: the anchors are now PEA-wide totals rather than per-state slices,
+so the min-max scaling shifts for everyone.
+
+**Also fixed in passing:** three further joins keyed on `(economic_area, abbr)` would have silently
+missed every PEA whose facilities sit outside its dominant state. They are now keyed on
+`economic_area` alone, with `abbr` carried as an attribute of the row rather than part of the key.
 
 ---
 

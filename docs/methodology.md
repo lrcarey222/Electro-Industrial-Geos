@@ -170,6 +170,32 @@ Inputs (higher is better unless noted):
 
 Indicators are scaled by polarity. The cluster index is computed as the mean of non-anchor inputs plus the maximum anchor metric, then rescaled to [0, 1] for comparability. The output also records `dominant_anchor` (which anchor won), scaled `positive`/`negative` summaries, and a `cluster_top` label for areas with `cluster_index > 0.5`. The pipeline now computes both a PEA-level cluster index and a state-level cluster index where each state inherits its top-scoring PEA cluster (legacy behavior).
 
+### What a PEA row means
+
+A Partial Economic Area is **a geography in its own right, not a slice of a
+state**. `outputs/Electro-Industrial_pea.csv` carries exactly one row per PEA,
+and the facility anchors in it are summed over the whole PEA.
+
+106 of the 416 PEAs cross a state line, so attaching state-level context —
+workforce, electricity price, capacity growth — requires choosing one state per
+PEA. That is **the state holding the largest share of the PEA's population**.
+Population rather than land area or county count: the index is an economic
+measure, so the state where most of a PEA's people live is the state whose
+economic context applies to it.
+
+Two consequences worth knowing when reading the outputs:
+
+* A PEA's state is the *dominant* state, not the only one. `Baltimore,
+  MD-Washington, DC` is attributed to Maryland although it also covers Virginia.
+* The reverse mapping is **not** dominance. The state-level cluster index is
+  the best-scoring PEA that **overlaps** that state, which is a different
+  question — Connecticut, New Jersey and Rhode Island dominate no PEA at all,
+  and inherit from the larger metros they sit inside.
+
+Before 2026-10-06 neither choice was made: a PEA straddling a border emitted one
+row per state, so the same PEA appeared two or three times with different
+values. See `refactor_plan.md` F-21.
+
 ## Electro-Industrial Index
 
 The combined Electro-Industrial Index uses the following weights (from the legacy script):
