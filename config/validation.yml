@@ -48,6 +48,12 @@ coverage:
     - incentives_gdp     # Good Jobs First, licensed; gitignored
     - workforce_share    # BLS QCEW connector needs network
     - workforce_growth   # BLS QCEW connector needs network
+    # EIA-860M. Added 2026-10-06 with F-12: the only staged workbooks were HTML
+    # error pages, and the EIA fallback loop was fetching a real one mid-run
+    # even though CI declares it downloads nothing. With that unguarded fetch
+    # closed and the error pages removed, CI genuinely cannot build these two.
+    - electric_capacity_growth
+    - clean_electric_capacity_growth
 
 # Tolerances for scripts/30_diff_outputs.R. Unchanged defaults, recorded here
 # so validation settings live in one file.

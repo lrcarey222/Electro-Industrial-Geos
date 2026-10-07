@@ -50,15 +50,10 @@ ingest_legacy_sources <- function(paths, snapshot_date, skip_downloads = FALSE) 
   }
   generator_source <- make_generator_source(generator_date)
 
-  is_valid_xlsx <- function(path) {
-    if (!fs::file_exists(path) || fs::file_size(path) <= 0) {
-      return(FALSE)
-    }
-    con <- file(path, "rb")
-    on.exit(close(con), add = TRUE)
-    sig <- readBin(con, what = "raw", n = 2)
-    identical(sig, charToRaw("PK"))
-  }
+  # is_valid_xlsx() now lives in utils_download.R, beside the validator that
+  # actually prevents a bad file being cached. It was previously defined twice,
+  # here and in 07_process_data.R, and applied only at read time -- never inside
+  # download_with_cache(), which is where the poisoned files were created.
 
   download_sources <- list(
     list(
