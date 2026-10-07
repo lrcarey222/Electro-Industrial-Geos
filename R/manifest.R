@@ -150,10 +150,46 @@ manifest_upsert <- function(manifest, entry) {
   dplyr::bind_rows(manifest, row)
 }
 
-#' SHA-256 of a file
+#' Is this file binary?
+#'
+#' Decided by content, not extension: a NUL byte in the first chunk means the
+#' file is not text. Extension-based guessing would misclassify the unfamiliar
+#' formats this pipeline reads, and getting it wrong in the binary direction
+#' would corrupt a digest.
 #'
 #' @param path File path.
-#' @return Lowercase hex digest, or NA if absent.
+#' @param n Bytes to sniff.
+#' @return `TRUE` or `FALSE`.
+#' @keywords internal
+is_binary_file <- function(path, n = 8192L) {
+  if (!fs::file_exists(path) || fs::file_size(path) == 0) {
+    return(FALSE)
+  }
+  con <- file(path, "rb")
+  on.exit(close(con), add = TRUE)
+  bytes <- readBin(con, what = "raw", n = n)
+  any(bytes == as.raw(0))
+}
+
+#' SHA-256 of a file's *content*, insensitive to line endings
+#'
+#' The recorded hash answers "is this the same data the published number came
+#' from". Hashing the file as it sits on disk answers a different and less
+#' useful question, because git rewrites line endings on checkout: re-seeding
+#' the manifest on Windows changed `gjf_subsidy_tracker`'s digest while its row
+#' count, geography count and schema fingerprint were byte-identical. A hash
+#' that flips on checkout either raises false alarms about a publisher changing
+#' a file, or teaches people to ignore the field -- which costs the manifest its
+#' main purpose (docs/refactor_plan.md F-24).
+#'
+#' Text files are therefore normalised to LF before hashing. Binary files are
+#' hashed exactly as they are, because normalising bytes inside a ZIP or
+#' shapefile would be corruption, not normalisation.
+#'
+#' Decision 2026-10-05: fingerprint the content and ignore line endings.
+#'
+#' @param path File path.
+#' @return Lowercase hex digest, or `NA` if the file is absent.
 #' @export
 file_sha256 <- function(path) {
   if (!fs::file_exists(path)) {
@@ -162,7 +198,28 @@ file_sha256 <- function(path) {
   if (!requireNamespace("digest", quietly = TRUE)) {
     rlang::abort("Package 'digest' is required to fingerprint files.")
   }
-  digest::digest(path, algo = "sha256", file = TRUE)
+
+  if (is_binary_file(path)) {
+    return(digest::digest(path, algo = "sha256", file = TRUE))
+  }
+
+  size <- fs::file_size(path)
+  con <- file(path, "rb")
+  on.exit(close(con), add = TRUE)
+  bytes <- readBin(con, what = "raw", n = as.numeric(size))
+
+  # CRLF -> LF, then any remaining lone CR -> LF, so a file written on any of
+  # the three conventions digests identically.
+  cr <- as.raw(13L)
+  lf <- as.raw(10L)
+  if (length(bytes) > 0) {
+    crlf <- which(bytes == cr & c(bytes[-1], as.raw(255L)) == lf)
+    if (length(crlf) > 0) {
+      bytes <- bytes[-crlf]
+    }
+    bytes[bytes == cr] <- lf
+  }
+  digest::digest(bytes, algo = "sha256", serialize = FALSE)
 }
 
 #' Schema fingerprint for a data frame
