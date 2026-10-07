@@ -1,4 +1,4 @@
 library(testthat)
-library(Electro-Industrialindex)
+library(electroindustrial)
 
-test_check("Electro-Industrialindex")
+test_check("electroindustrial")
