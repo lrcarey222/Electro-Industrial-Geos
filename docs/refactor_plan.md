@@ -38,7 +38,8 @@ Severity is about the published index, not about code tidiness.
 | [F-15](#f-15) | medium | DC is excluded from all state outputs; the brief assumes 50 states + DC | needs your decision |
 | [F-16](#f-16) | **blocker** | Four packages the pipeline loads are declared nowhere, so CI cannot install them | ✅ fixed in step 0a |
 | [F-17](#f-17) | **blocker** | `DESCRIPTION` is not a readable control file, so CI has never installed *any* dependency | ✅ fixed in step 0a |
-| [F-18](#f-18) | medium | `Package:` is not a legal R package name, so the package can never be installed | needs your decision |
+| [F-18](#f-18) | medium | `Package:` is not a legal R package name, so the package can never be installed | ✅ decided 2026-10-05, renamed to `electroindustrial` 2026-10-07 |
+| [F-26](#f-26) | medium | `NAMESPACE` exports 38 of 107 functions in `R/`, so the package is not buildable | found 2026-10-07; not fixed |
 | [F-19](#f-19) | **blocker** | `renv.lock` is structurally invalid, so `renv::restore()` aborts | ✅ unblocked in step 0b; real pinning deferred |
 | [F-23](#f-23) | **high** | `workforce_growth` was not a growth rate, and compared two different baskets of industries | ✅ fixed 2026-09-29, with a diff report |
 | [F-24](#f-24) | medium | Manifest `sha256` is line-ending sensitive, so a checkout can fake a source change | found 2026-09-30; not fixed |
@@ -1072,6 +1073,33 @@ Worth noting this is the same root cause as F-02: a global find-and-replace inse
 `Electro-Industrial` into identifiers where a hyphen is illegal. The legacy script got syntax
 errors; `DESCRIPTION` got an unusable package name.
 
+**Decided 2026-10-05, renamed 2026-10-07 to `electroindustrial`.** Verified legal:
+
+```r
+grepl("^[a-zA-Z][a-zA-Z0-9.]*$", "electroindustrial")
+#> TRUE
+```
+
+Changed in `DESCRIPTION`, `tests/testthat.R` and `ingest_sample.R`. `CITATION.cff` also carried the
+bad name inside a placeholder URL (`https://example.com/Electro-Industrialindex`), now the real
+repository URL.
+
+**The rename does not make the package installable, and the tests still source `R/` directly.**
+That is not a workaround left in place out of inertia — it is correct for a different reason that
+only became visible once the name was fixed:
+
+`NAMESPACE` exports **38** names, and the suite exercises many more. None of the connectors added
+during this work is exported — `qcew_*`, `bnef_*`, `indicator_coverage()`, `pea_dominant_state()`,
+`file_sha256()`, `load_census_county_population()` — so `library(electroindustrial)` would attach a
+package that does not contain most of what is under test. `NAMESPACE` is hand-maintained and has
+drifted from `R/`; there is no `man/` and roxygen has never been run, despite
+`Roxygen: list(markdown = TRUE)` in `DESCRIPTION`.
+
+So F-18 is closed, but it uncovers a separate piece of outstanding work: **`NAMESPACE` is out of
+date and the package is not actually buildable.** That needs a real `roxygen2::roxygenise()` pass
+and a decision about which helpers are API and which are internal — recorded as
+[F-26](#f-26) rather than silently bundled into a rename.
+
 ---
 
 <a id="f-19"></a>
@@ -1439,6 +1467,55 @@ Verified three ways: a live run passes at 5; the CI simulation passes at 12; and
 from the declared list makes that indicator's bleed undeclared, which aborts the run naming it —
 `outputs/` contained **0 files** afterwards, so the claim that outputs were not written is
 measured rather than asserted.
+
+---
+
+<a id="f-26"></a>
+### F-26 — `NAMESPACE` has drifted from `R/`, so the package is not buildable *(medium — found, not fixed)*
+
+Found while renaming the package (F-18). Fixing the name made it legal; it did not make it
+installable.
+
+`NAMESPACE` exports **38** names and is hand-maintained. `R/` defines **107** functions, so **69
+are unexported**. Measured, not estimated:
+
+```
+NAMESPACE exports:            38
+functions defined in R/:     107
+exports with no definition:    0
+```
+
+The drift is one-directional — every export does still exist, `R/` has simply grown past it — which
+is why nothing is visibly broken. **None** of the work added during this refactor is exported:
+
+| not exported | added by |
+|---|---|
+| `qcew_*` (10 functions) | the BLS QCEW connector |
+| `bnef_*`, `latest_bnef_export()` | the BNEF fix |
+| `load_census_county_population()`, `load_state_boundaries()`, `census_county_pop_url()` | F-11 |
+| `indicator_coverage()`, `coverage_regressions()`, `coverage_exit_code()`, `definition_indicators()` | the coverage gate |
+| `pea_dominant_state()` | F-21 |
+| `file_sha256()`, `is_binary_file()`, `schema_fingerprint()`, `count_geographies()` | the manifest |
+| `is_valid_xlsx()`, `looks_like_html()`, `default_download_validator()` | F-12 |
+| everything in `R/freshness.R`, `R/notify.R`, `R/sources_registry.R` | Phase 1 |
+
+There is also no `man/` directory and roxygen has never been run, despite
+`Roxygen: list(markdown = TRUE)` in `DESCRIPTION` and roxygen-style `#'` blocks throughout `R/`.
+The `@export` tags are therefore decorative: they document intent that `NAMESPACE` does not
+reflect.
+
+**Consequences.** `library(electroindustrial)` would attach a package missing most of the
+implementation, so `tests/testthat.R` — the `R CMD check` entry point — cannot work even now, and
+`tests/testthat/setup.R` sourcing `R/` directly is the only loader that reflects reality. The
+`system.file("extdata", ...)` fallback in `ingest_sample.R` is still unreachable in practice for
+the same reason, so `inst/extdata/sample_inputs.csv` remains dead weight next to the
+`data/examples/` copy that actually gets read.
+
+**Remedy, not taken here.** Run `roxygen2::roxygenise()` and let it generate `NAMESPACE` and
+`man/`, which requires first deciding which helpers are public API and which are internal —
+exporting all 107 would be a non-decision. Scoped as
+its own work item because it changes what the package *is*, and because an incorrect `NAMESPACE`
+is currently harmless (nothing installs the package) whereas a half-done one would not be.
 
 ---
 

@@ -9,7 +9,7 @@ load_sample_inputs <- function(paths = getOption("Electro_Industrial.paths")) {
   }
   sample_path <- fs::path(paths$examples_dir, "sample_inputs.csv")
   if (!fs::file_exists(sample_path)) {
-    sample_path <- system.file("extdata", "sample_inputs.csv", package = "Electro-Industrialindex")
+    sample_path <- system.file("extdata", "sample_inputs.csv", package = "electroindustrial")
   }
   if (sample_path == "" || !fs::file_exists(sample_path)) {
     rlang::abort("Sample inputs not found in data/examples or inst/extdata.")

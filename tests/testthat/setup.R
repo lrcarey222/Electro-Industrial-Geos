@@ -8,10 +8,21 @@
 # `test_that()`. Locate the repository root explicitly, then load the
 # implementation once, here, for every test file.
 #
-# This deliberately does not `library()` the package. `Package:` in DESCRIPTION
-# is `Electro-Industrialindex`, which is not a legal R package name -- hyphens
-# are not permitted -- so the package cannot be installed and cannot be attached.
-# See docs/refactor_plan.md F-18.
+# This deliberately does not `library()` the package, and still sources R/
+# directly. The name was illegal until 2026-10-07 -- `Electro-Industrialindex`,
+# with a hyphen -- so the package could not be installed or attached at all
+# (F-18). It is now `electroindustrial`, which is legal.
+#
+# Sourcing R/ remains the right loader regardless, because the tests exercise
+# functions the package does not export. NAMESPACE exports 38 names; the suite
+# relies on many more, including every connector added since -- qcew_*, bnef_*,
+# indicator_coverage(), pea_dominant_state(), file_sha256() -- none of which is
+# exported. `library()` would load a package that does not contain most of what
+# is under test.
+#
+# Bringing NAMESPACE back in line with R/ is real outstanding work and is not a
+# rename. Until then this file is the loader, and `tests/testthat.R` -- the
+# `R CMD check` entry point, which does call `library()` -- stays aspirational.
 
 find_repo_root_for_tests <- function(start = getwd()) {
   dir <- normalizePath(start, winslash = "/", mustWork = FALSE)
