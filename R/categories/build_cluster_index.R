@@ -77,11 +77,38 @@ build_cluster_index <- function(inputs, geo_col = "state", top_label_col = geo_c
 #' @param cluster_pea PEA cluster index data frame.
 #' @return State-level cluster table using the top-ranked PEA per state.
 #' @export
-build_state_cluster_from_pea <- function(cluster_pea) {
+build_state_cluster_from_pea <- function(cluster_pea, membership = NULL) {
   required_cols <- c("state", "cluster_index", "cluster_top")
   missing_cols <- setdiff(required_cols, names(cluster_pea))
   if (length(missing_cols) > 0) {
     rlang::abort(glue::glue("PEA cluster index missing required columns: {paste(missing_cols, collapse = ', ')}"))
+  }
+
+  # A state inherits from the best PEA that OVERLAPS it, which is not the same
+  # as the best PEA it dominates. Connecticut, New Jersey and Rhode Island
+  # dominate no PEA at all -- they are absorbed into larger multi-state metros --
+  # so grouping on the PEA's own `state` column alone silently scores them 0.
+  #
+  # Before F-21 was fixed this worked by accident: a PEA emitted one row per
+  # state it touched, so membership was implicit in the duplication. With one
+  # row per PEA it has to be passed in explicitly.
+  if (!is.null(membership) && nrow(membership) > 0) {
+    needed <- c("economic_area", "state")
+    if (!all(needed %in% names(membership))) {
+      rlang::abort(glue::glue(
+        "PEA state membership needs {paste(needed, collapse = ', ')}."
+      ))
+    }
+    if (!"economic_area" %in% names(cluster_pea)) {
+      rlang::abort("PEA cluster index needs `economic_area` to expand membership.")
+    }
+    cluster_pea <- cluster_pea %>%
+      dplyr::select(-dplyr::all_of("state")) %>%
+      dplyr::inner_join(
+        membership %>% dplyr::distinct(.data$economic_area, .data$state),
+        by = "economic_area",
+        relationship = "many-to-many"
+      )
   }
 
   cluster_pea %>%

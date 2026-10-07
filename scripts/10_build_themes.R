@@ -73,5 +73,11 @@ cluster_pea <- build_cluster_index(
   top_label_col = "economic_area"
 )
 
-cluster <- build_state_cluster_from_pea(cluster_pea) %>%
+# Membership, not dominance: a state inherits the best PEA that overlaps it.
+# Without this the three states that dominate no PEA score 0 -- see
+# build_state_cluster_from_pea() and docs/refactor_plan.md F-21.
+cluster <- build_state_cluster_from_pea(
+  cluster_pea,
+  membership = if (exists("pea_state_membership", inherits = TRUE)) pea_state_membership else NULL
+) %>%
   dplyr::mutate(state = as.character(.data$state))
