@@ -1,7 +1,10 @@
 #' Build incentives-by-sector by state and year (since 2020)
 #'
 #' @param gjf Good Jobs First data frame (raw or cleaned names).
-#' @param state_gdp Optional state GDP table with columns GeoName and gdp_2024.
+#' @param state_gdp Optional state GDP table with columns `GeoName` and `gdp`.
+#'   The column was `gdp_2024` until 2026-10-08; it no longer carries the
+#'   vintage, because the name and the file it came from had to be kept in
+#'   lockstep by hand (F-06). `gdp_year` travels alongside it instead.
 #' @return Tibble with state, year, sector, subs_m, incentives_gdp.
 #' @export
 build_incentives_by_sector_year <- function(gjf = NULL, state_gdp = NULL) {
@@ -36,11 +39,14 @@ build_incentives_by_sector_year <- function(gjf = NULL, state_gdp = NULL) {
     dplyr::group_by(state = .data$location, .data$year, .data$sector) %>%
     dplyr::summarize(subs_m = sum(as.numeric(.data$subs_m), na.rm = TRUE), .groups = "drop")
 
-  if (!is.null(state_gdp) && nrow(state_gdp) > 0 && all(c("GeoName", "gdp_2024") %in% names(state_gdp))) {
+  if (!is.null(state_gdp) && nrow(state_gdp) > 0 && all(c("GeoName", "gdp") %in% names(state_gdp))) {
     out <- out %>%
-      dplyr::left_join(state_gdp %>% dplyr::transmute(state = .data$GeoName, gdp_2024 = as.numeric(.data$gdp_2024)), by = "state") %>%
-      dplyr::mutate(incentives_gdp = dplyr::if_else(is.na(.data$gdp_2024), NA_real_, .data$subs_m / .data$gdp_2024 * 100)) %>%
-      dplyr::select(-.data$gdp_2024)
+      dplyr::left_join(
+        state_gdp %>% dplyr::transmute(state = .data$GeoName, gdp = as.numeric(.data$gdp)),
+        by = "state"
+      ) %>%
+      dplyr::mutate(incentives_gdp = dplyr::if_else(is.na(.data$gdp), NA_real_, .data$subs_m / .data$gdp * 100)) %>%
+      dplyr::select(-dplyr::all_of("gdp"))
   } else {
     out <- out %>% dplyr::mutate(incentives_gdp = NA_real_)
   }

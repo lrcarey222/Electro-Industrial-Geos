@@ -65,95 +65,36 @@ safe_left_join <- function(x, y, by) {
 }
 
 # ---- GDP + Growth Index --------------------------------------------------
+# Both readers now live in R/connectors/bea.R, which globs the zip member by
+# table prefix instead of matching a filename with the vintage baked into it,
+# and discovers the latest year column instead of naming `x2024`. Both
+# hard-codings were already stale against live BEA -- see F-06.
 load_state_gdp <- function(raw_dir) {
-  zip_path <- fs::path(raw_dir, "remote", "SAGDP.zip")
-  if (!fs::file_exists(zip_path)) {
+  gdp <- load_bea_annual_gdp(raw_dir)
+  if (is.null(gdp)) {
+    # Absent zip is a staging problem, not a schema break. Said out loud,
+    # because this is the incentives_gdp denominator.
+    msg <- "BEA SAGDP.zip is not staged -- incentives_gdp will be NA."
+    message(msg)
+    rlang::warn(msg)
     return(tibble::tibble())
   }
-  temp_dir <- tempfile()
-  fs::dir_create(temp_dir)
-  utils::unzip(zip_path, exdir = temp_dir)
-  gdp_path <- list.files(temp_dir, full.names = TRUE)
-  gdp_path <- gdp_path[stringr::str_detect(basename(gdp_path), "SAGDP9__ALL_AREAS_1997_2024.csv")][1]
-  if (is.na(gdp_path)) {
-    return(tibble::tibble())
-  }
-  gdp <- utils::read.csv(
-    gdp_path,
-    stringsAsFactors = FALSE,
-    check.names = FALSE
-  ) %>%
-    janitor::clean_names()
-  gdp %>%
-    dplyr::filter(.data$description == "All industry total ") %>%
-    dplyr::select(
-      GeoFIPS = "geo_fips",
-      GeoName = "geo_name",
-      Unit = "unit",
-      Description = "description",
-      gdp_2024 = "x2024"
-    ) %>%
-    dplyr::mutate(gdp_2024 = readr::parse_number(gdp_2024))
+  message("BEA annual GDP: ", gdp$gdp_year[[1]], " vintage")
+  gdp
 }
 
 load_quarterly_gdp_growth <- function(raw_dir, states) {
-  zip_path <- fs::path(raw_dir, "remote", "SQGDP.zip")
-  if (!fs::file_exists(zip_path)) {
+  growth <- load_bea_quarterly_gdp_growth(raw_dir, states)
+  if (is.null(growth)) {
+    # SQGDP was read from disk but registered nowhere, so it had no refresh
+    # path at all. It is registered now; an absent zip is still a staging
+    # problem rather than a schema break.
+    msg <- "BEA SQGDP.zip is not staged -- gdp_growth_index will be NA."
+    message(msg)
+    rlang::warn(msg)
     return(tibble::tibble())
   }
-  temp_dir <- tempfile()
-  fs::dir_create(temp_dir)
-  utils::unzip(zip_path, exdir = temp_dir)
-  gdp_path <- list.files(temp_dir, full.names = TRUE)
-  gdp_path <- gdp_path[stringr::str_detect(basename(gdp_path), "SQGDP9__ALL_AREAS_2005_2025.csv")][1]
-  if (is.na(gdp_path)) {
-    return(tibble::tibble())
-  }
-
-  gdp_raw <- utils::read.csv(gdp_path, stringsAsFactors = FALSE, check.names = FALSE) %>%
-    janitor::clean_names()
-
-  quarter_cols <- names(gdp_raw)[stringr::str_detect(names(gdp_raw), "^x\\d{4}_q[1-4]$")]
-  if (length(quarter_cols) == 0) {
-    return(tibble::tibble())
-  }
-
-  gdp_raw <- gdp_raw %>%
-    dplyr::mutate(dplyr::across(dplyr::all_of(quarter_cols), ~ readr::parse_number(as.character(.x))))
-
-  quarter_info <- stringr::str_match(quarter_cols, "^x(\\d{4})_q([1-4])$")
-  years <- as.integer(quarter_info[, 2])
-  quarters <- as.integer(quarter_info[, 3])
-  latest_idx <- order(years, quarters, decreasing = TRUE)[1]
-  latest_col <- quarter_cols[latest_idx]
-  latest_year <- years[latest_idx]
-  latest_quarter <- quarters[latest_idx]
-
-  prior_col <- function(offset) {
-    target <- paste0("x", latest_year - offset, "_q", latest_quarter)
-    if (target %in% quarter_cols) target else NA_character_
-  }
-
-  col_1yr <- prior_col(1)
-  col_5yr <- prior_col(5)
-  col_10yr <- prior_col(10)
-
-  gdp_ind <- gdp_raw %>%
-    dplyr::filter(.data$industry_classification == "321,327-339") %>%
-    dplyr::mutate(
-      gdp_growth_1yr = if (is.na(col_1yr)) NA_real_ else .data[[latest_col]] / .data[[col_1yr]] - 1,
-      gdp_growth_5yr = if (is.na(col_5yr)) NA_real_ else .data[[latest_col]] / .data[[col_5yr]] - 1,
-      gdp_growth_10yr = if (is.na(col_10yr)) NA_real_ else .data[[latest_col]] / .data[[col_10yr]] - 1
-    ) %>%
-    dplyr::select(geo_name, gdp_growth_1yr, gdp_growth_5yr, gdp_growth_10yr) %>%
-    dplyr::inner_join(states, by = c("geo_name" = "state"))
-
-  growth_cols <- c("gdp_growth_1yr", "gdp_growth_5yr", "gdp_growth_10yr")
-
-  gdp_ind %>%
-    dplyr::mutate(dplyr::across(dplyr::all_of(growth_cols), scale_minmax)) %>%
-    dplyr::mutate(gdp_growth_index = rowmean_index(dplyr::select(., dplyr::all_of(growth_cols)))) %>%
-    dplyr::transmute(state = .data$geo_name, gdp_growth_index)
+  growth
 }
 
 
@@ -327,9 +268,12 @@ if (!is.null(gjf) && nrow(state_gdp) > 0) {
     dplyr::group_by(location) %>%
     dplyr::summarize(subs_m = sum(subs_m, na.rm = TRUE), .groups = "drop")
 
+  # `gdp` rather than `gdp_2024`: the denominator's column no longer carries
+  # the vintage, which had to be kept in lockstep with the filename by hand
+  # (F-06). `gdp_year` travels alongside it for provenance.
   incentives <- Electro_Industrial_state_tot %>%
     dplyr::left_join(state_gdp, by = c("location" = "GeoName")) %>%
-    dplyr::mutate(incentives_gdp = ifelse(is.na(gdp_2024), NA_real_, subs_m / gdp_2024 * 100)) %>%
+    dplyr::mutate(incentives_gdp = ifelse(is.na(gdp), NA_real_, subs_m / gdp * 100)) %>%
     dplyr::transmute(state = location, incentives_gdp)
 }
 incentives <- ensure_optional_numeric(incentives, "incentives_gdp")
