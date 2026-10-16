@@ -119,10 +119,20 @@ sources:
     can_commit_raw: true
     license: "Public domain (US Government work)"
     notes: >
-      Read by the pipeline but absent from the download registry, so it has
-      never been refreshed (F-06). The member filename embeds its vintage
-      (SQGDP9__ALL_AREAS_2005_2025.csv) and is matched exactly, so the next
-      release silently yields an empty table; match on the prefix instead.
+      CONNECTED 2026-10-08 -- R/connectors/bea.R, and registered for download
+      for the first time. It was read from data/raw/remote/ but absent from
+      ingest_legacy_sources(), so the committed copy was the only source and no
+      refresh path existed at all (F-06).
+
+      The member is now found by table prefix (SQGDP9__ALL_AREAS_) rather than
+      by exact filename. That filename was already stale: the staged member is
+      ..._2005_2025.csv while BEA now ships ..._2005_2026.csv, so the next
+      refresh would have silently emptied gdp_growth_index for every state.
+
+      The quarter columns were already discovered rather than pinned. An empty
+      result after a successful read is now an error rather than an empty
+      tibble, because safe_left_join() would otherwise drop the join and leave
+      the indicator NA with no warning.
 
   - id: bea_sagdp
     label: "BEA annual GDP by state"
@@ -142,8 +152,21 @@ sources:
     can_commit_raw: true
     license: "Public domain (US Government work)"
     notes: >
-      Denominator only: supplies gdp_2024 for incentives_gdp, which is owned by
-      gjf_subsidy_tracker. Same hard-coded-vintage-filename problem as SQGDP.
+      Denominator only: supplies the GDP figure for incentives_gdp, which is
+      owned by gjf_subsidy_tracker.
+
+      CONNECTED 2026-10-08 -- R/connectors/bea.R. The zip member is found by
+      table prefix (SAGDP9__ALL_AREAS_) rather than by a filename with the year
+      range baked in, and the value column is discovered as the latest x<year>
+      rather than named. Both were already stale against live BEA: the staged
+      member is ..._1997_2024.csv while BEA now ships ..._1997_2025.csv, so the
+      next refresh would have emptied the denominator silently (F-06).
+
+      The output column is `gdp`, with `gdp_year` alongside. It was `gdp_2024`,
+      which had to be kept in lockstep with the filename by hand.
+
+      BEA footnote codes -- (D) withheld, (L) below threshold, (N)/(NA)/(NM) --
+      are read as NA deliberately rather than by letting parse_number fail.
 
   - id: bls_qcew
     label: "BLS Quarterly Census of Employment and Wages, state industry slices"
