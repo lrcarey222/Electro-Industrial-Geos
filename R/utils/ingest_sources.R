@@ -61,6 +61,14 @@ ingest_legacy_sources <- function(paths, snapshot_date, skip_downloads = FALSE) 
       url = "https://apps.bea.gov/regional/zip/SAGDP.zip",
       filename = "SAGDP.zip"
     ),
+    # SQGDP was read from data/raw/remote/ but registered nowhere, so the
+    # committed copy was the only source and no refresh path existed (F-06).
+    # URL verified live 2026-10-08.
+    list(
+      name = "bea_sqgdp",
+      url = "https://apps.bea.gov/regional/zip/SQGDP.zip",
+      filename = "SQGDP.zip"
+    ),
     list(
       name = "eig_dynamism",
       url = "https://eig.org/state-dynamism-2025/assets/Downloadable-Data-EIG-Index-of-State-Dynamism-2022.xlsx",

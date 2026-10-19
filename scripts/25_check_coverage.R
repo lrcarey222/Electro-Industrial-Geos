@@ -70,10 +70,19 @@ if (length(coverage_result$sparse) > 0) {
 
 # A declared indicator that has recovered is good news, and the list should
 # shrink to match. Said out loud so the ratchet actually tightens.
-if (length(coverage_result$recovered) > 0) {
+#
+# Only the unconditional list is worth reporting. `allowed_when_inputs_unavailable`
+# is conditional by design -- a developer with the licensed files staged does not
+# lack them, so "recovered" there means nothing and advising its removal would be
+# wrong: CI still needs the entry.
+recovered_unconditional <- intersect(
+  coverage_result$recovered,
+  as.character(coverage_config$allowed_sample_bleed %||% character(0))
+)
+if (length(recovered_unconditional) > 0) {
   message(sprintf(
     "coverage: no longer on sample data, remove from config/validation.yml -- %s",
-    paste(coverage_result$recovered, collapse = ", ")
+    paste(recovered_unconditional, collapse = ", ")
   ))
 }
 

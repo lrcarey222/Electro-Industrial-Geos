@@ -23,7 +23,7 @@ Severity is about the published index, not about code tidiness.
 | [F-03](#f-03) | **high** | The test suite executes zero assertions; the one parity check compares against `NULL` | ✅ fixed in step 0b |
 | [F-04](#f-04) | **high** | EIA electricity price reads the **residential** column, not industrial — a regression against the committed vintage | ✅ fixed, with a diff report |
 | [F-05](#f-05) | **high** | `industrial_electricity_price` is joined under the wrong column name, so the indicator keeps sample data | ✅ **fully fixed** — price half earlier; workforce half by the QCEW connector, 2026-09-29 |
-| [F-06](#f-06) | **high** | `SQGDP.zip` is read but never downloaded; BEA filenames are hard-coded with years and fail silently | Phase 2 |
+| [F-06](#f-06) | **high** | `SQGDP.zip` is read but never downloaded; BEA filenames are hard-coded with years and fail silently | ✅ fixed 2026-10-08 — both pinned filenames were already stale against live BEA |
 | [F-07](#f-07) | medium | The AFDC station-count parser reads unnamed columns positionally | Phase 2 |
 | [F-08](#f-08) | medium | The BNEF snapshot date is hard-coded, so a refreshed file yields zero rows | ✅ fixed, with a diff report; **`Other.Pipeline.(MW)` is a negated mirror column — see the note** |
 | [F-09](#f-09) | medium | One CIM directory holds two different release vintages, and the facility schema gate fails silently | Phase 1 / 2 |
@@ -406,6 +406,42 @@ three steps later.
 
 **Remedy.** Register SQGDP; glob the member by prefix (`^SAGDP9__ALL_AREAS_`) rather than exact
 name; make an empty result an error, not a silent empty tibble.
+
+**Fixed 2026-10-08** as [`R/connectors/bea.R`](../R/connectors/bea.R). All three parts of the
+remedy, plus two things the original write-up missed.
+
+**Both hard-coded filenames were already stale.** Measured against live BEA:
+
+| | staged, hard-coded | live 2026-10-08 |
+|---|---|---|
+| annual | `SAGDP9__ALL_AREAS_1997_2024.csv` | `SAGDP9__ALL_AREAS_1997_**2025**.csv` |
+| quarterly | `SQGDP9__ALL_AREAS_2005_2025.csv` | `SQGDP9__ALL_AREAS_2005_**2026**.csv` |
+
+Nothing had broken only because the committed zips are the old vintage. The next refresh would
+have emptied both indicators.
+
+**A third hard-coding the original finding missed.** The annual reader selected the column `x2024`
+— `clean_names()`'s rendering of BEA's `2024`. The column name carried the vintage too, so the file
+and the column had to be updated in lockstep by hand. That is the same coupling that hid the
+staleness of the Census population denominator in F-11, and it is why the output column is now
+`gdp` with `gdp_year` beside it rather than `gdp_2024`.
+
+**A fourth thing, found by running it.** BEA marks cells it will not give a number for with a
+parenthesised footnote code — `(D)` withheld to avoid disclosure, `(L)` below a reporting
+threshold, `(N)`/`(NA)`/`(NM)` unavailable. The old reader relied on `readr::parse_number()`
+*failing* on these, which produced the right answer by accident while emitting **75 parse warnings
+per run**. `bea_parse_values()` now maps them to `NA` deliberately; suppressed is unknown, not
+zero, which is the same rule the QCEW connector applies. The noise mattered: 75 spurious warnings
+is exactly the cover a real parse failure would hide behind.
+
+**Ambiguity is an error.** `bea_zip_member()` aborts if the prefix matches zero members *or more
+than one*, rather than taking `[1]`. The double underscore in the prefix is load-bearing —
+`SAGDP1__`, `SAGDP9__` and `SAGDP11__` are different tables, and there is a test for each.
+
+**Effect: none, by design.** `0 of 33` indicators changed, `0 of 50` ranks moved, and both BEA-fed
+indicators are identical (`gdp_growth_index` 48/50, `incentives_gdp` 40/50). That is the correct
+outcome — the committed zips still match the old pinned names, so this is a fix against the *next*
+refresh rather than a data change.
 
 ---
 
