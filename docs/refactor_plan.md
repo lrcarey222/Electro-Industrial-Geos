@@ -40,6 +40,7 @@ Severity is about the published index, not about code tidiness.
 | [F-17](#f-17) | **blocker** | `DESCRIPTION` is not a readable control file, so CI has never installed *any* dependency | ✅ fixed in step 0a |
 | [F-18](#f-18) | medium | `Package:` is not a legal R package name, so the package can never be installed | ✅ decided 2026-10-05, renamed to `electroindustrial` 2026-10-07 |
 | [F-26](#f-26) | medium | `NAMESPACE` exports 38 of 107 functions in `R/`, so the package is not buildable | found 2026-10-07; not fixed |
+| [F-27](#f-27) | **governance** | Sync-conflict copies of licensed payloads were neither ignored nor caught by CI | ✅ fixed 2026-10-19 |
 | [F-19](#f-19) | **blocker** | `renv.lock` is structurally invalid, so `renv::restore()` aborts | ✅ unblocked in step 0b; real pinning deferred |
 | [F-23](#f-23) | **high** | `workforce_growth` was not a growth rate, and compared two different baskets of industries | ✅ fixed 2026-09-29, with a diff report |
 | [F-24](#f-24) | medium | Manifest `sha256` is line-ending sensitive, so a checkout can fake a source change | ✅ decided 2026-10-05, fixed 2026-10-07 — content is hashed, line endings normalised |
@@ -1619,6 +1620,52 @@ the same reason, so `inst/extdata/sample_inputs.csv` remains dead weight next to
 exporting all 107 would be a non-decision. Scoped as
 its own work item because it changes what the package *is*, and because an incorrect `NAMESPACE`
 is currently harmless (nothing installs the package) whereas a half-done one would not be.
+
+---
+
+<a id="f-27"></a>
+### F-27 — Sync-conflict copies of licensed payloads were not ignored *(governance)*
+
+Found on 2026-10-19, in the working tree rather than by reading code.
+
+This repository lives inside a synced OneDrive folder. Sync tools write conflict copies beside
+the original, and `data/raw/dbo_Program(1).csv` — a duplicate of the **C2ER** payload, a
+commercial subscription product marked `can_commit_raw: false` — was sitting there **untracked and
+not ignored**. One `git add -A` from a public repository.
+
+The ignore rules named the payloads exactly:
+
+```
+dbo_Program.csv
+cnbc_bus_rankings.csv
+gjf_complete.csv
+```
+
+An exact name does not match `dbo_Program(1).csv`, `cnbc_bus_rankings - Copy.csv`, or
+`gjf_complete-DESKTOP.csv`. Verified: `git check-ignore` reported the conflict copy as **not
+ignored**, and `git status` listed it as an ordinary untracked file.
+
+**CI would not have caught it either.** The existing guard runs
+`git ls-files -i -c --exclude-standard`, which finds files that are *tracked* **and** *ignored* —
+the signature of a `git add -f`. A payload whose name the ignore rules never matched is tracked
+and **not** ignored, so it passes that check cleanly.
+
+**Fixed, in two layers.**
+
+1. The licensed basenames are globbed on both sides (`*dbo_Program*`), and sync-conflict shapes
+   under `data/raw/` are excluded wholesale — `*(1)*`, `*(2)*`, `* - Copy*`, `*-Copy*`,
+   `*conflicted copy*`. Verified: five conflict-copy variants now report as ignored, and
+   `git ls-files -i -c` still returns nothing, so no tracked file was caught by the widening.
+2. CI gained a second pass that matches tracked files **by payload name signature** rather than by
+   ignore status. Verified both ways: it passes against the current tree, and a forced
+   `git add -f` of `dbo_Program(9).csv` is caught.
+
+The two layers fail independently: layer 1 stops the file being added, layer 2 stops it surviving
+if it is added anyway under a name layer 1 does not know about.
+
+**Worth noting for anyone working in this repo:** the OneDrive location also produces the CRLF
+churn behind [F-24](#f-24), and silently deletes untracked-but-wanted files when a branch switch
+removes them from the index. The sync folder is not a neutral place to keep a git working tree.
 
 ---
 

@@ -38,11 +38,27 @@ data/raw/cnbc_bus_rankings.csv
 # back to base_inputs on a clean clone.
 data/raw/dbo_Program.csv
 
-# Belt and braces: catch these payloads wherever they are dropped
+# Belt and braces: catch these payloads wherever they are dropped.
+#
+# The leading `*` matters. This repository lives inside a synced OneDrive
+# folder, and sync tools write conflict copies beside the original:
+# `dbo_Program(1).csv`, `cnbc_bus_rankings - Copy.csv`, `gjf_complete-DESKTOP.csv`.
+# An exact-name rule does not match those, so on 2026-10-19 a conflict copy of
+# the C2ER payload was sitting untracked and NOT ignored -- one `git add -A`
+# from a public repository. Globbing both sides catches every variant.
 **/*Global Data Center Live IT Capacity Database*
-gjf_complete.csv
-dbo_Program.csv
-cnbc_bus_rankings.csv
+*gjf_complete*
+*dbo_Program*
+*cnbc_bus_rankings*
+
+# Sync-conflict copies of anything under data/raw, whatever its licence. These
+# are never wanted in git: the original is either tracked already or ignored on
+# purpose, and a copy is at best duplicate weight and at worst a leak.
+data/raw/**/*(1)*
+data/raw/**/*(2)*
+data/raw/**/* - Copy*
+data/raw/**/*-Copy*
+data/raw/**/*conflicted copy*
 
 # Manual drop payloads for licensed sources. Templates and READMEs under
 # data/manual/ stay tracked; the data files do not.
