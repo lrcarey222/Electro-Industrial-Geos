@@ -71,6 +71,23 @@ jobs:
             exit 1
           fi
           echo "no tracked file is gitignored"
+
+          # The check above only catches a payload that .gitignore already
+          # names. It would miss one committed under a name the ignore rules do
+          # not match -- a sync-conflict copy, a rename, a different directory.
+          # This second pass matches on the payload itself, by name signature.
+          licensed=$(git ls-files | grep -Ei \
+            'gjf_complete|dbo_Program|cnbc_bus_rankings|Global Data Center Live IT Capacity' \
+            || true)
+          if [ -n "$licensed" ]; then
+            echo "::error::a tracked file matches a licensed payload name"
+            echo "$licensed"
+            echo
+            echo "These sources are can_commit_raw: false in config/sources.yml."
+            echo "Untrack with: git rm --cached <path>"
+            exit 1
+          fi
+          echo "no tracked file matches a licensed payload name"
       - name: Secret scan
         run: |
           if git grep -nE "(AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z\-_]{35}|ghp_[0-9A-Za-z]{36}|password\s*=|secret\s*=|token\s*=)" -- .; then
